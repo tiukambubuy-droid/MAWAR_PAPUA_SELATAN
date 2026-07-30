@@ -30,5 +30,13 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+  "node_modules",
+  "db/index.ts",
+  "worker",
+  "build",
+  "examples",
+  "dist",
+  ".sites-runtime"
+  ]
 }

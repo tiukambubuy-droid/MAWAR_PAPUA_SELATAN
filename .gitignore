@@ -35,6 +35,9 @@ yarn-error.log*
 
 # typescript
 next-env.d.ts
+*.tsbuildinfo
+
+# generated build and platform files
 /dist/
 /.wrangler/
 /.sites-runtime/
