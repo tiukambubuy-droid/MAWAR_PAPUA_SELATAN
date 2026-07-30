@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "1.0.0",
+  "collectionMethods": [
+    { "id": "method-field-entry", "code": "field-entry", "name": "Input Petugas Lapangan", "description": "Data dimasukkan oleh petugas lapangan melalui formulir pemantauan.", "isActive": true },
+    { "id": "method-field-survey", "code": "field-survey", "name": "Survei Lapangan", "description": "Data diperoleh melalui pemeriksaan langsung di lokasi.", "isActive": true },
+    { "id": "method-administrative-verification", "code": "administrative-verification", "name": "Verifikasi Administrasi", "description": "Data diperiksa terhadap dokumen dan laporan pendukung.", "isActive": true },
+    { "id": "method-system-calculation", "code": "system-calculation", "name": "Perhitungan Sistem", "description": "Nilai dihitung secara otomatis dari data dasar yang tervalidasi.", "isActive": true },
+    { "id": "method-production-estimation", "code": "production-estimation", "name": "Estimasi Produksi", "description": "Produksi diperkirakan dari luas panen dan produktivitas.", "isActive": true },
+    { "id": "method-external-integration", "code": "external-integration", "name": "Integrasi Sistem Eksternal", "description": "Data diperoleh melalui pertukaran data dengan sistem lain.", "isActive": true },
+    { "id": "method-simulation", "code": "simulation", "name": "Data Simulasi", "description": "Data dummy yang digunakan khusus untuk demonstrasi prototipe.", "isActive": true }
+  ]
+}

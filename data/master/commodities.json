@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "1.0.0",
+  "commodities": [
+    { "id": "commodity-paddy", "code": "PADI", "name": "Padi", "category": "Tanaman Pangan", "productionUnitId": "unit-ton", "areaUnitId": "unit-hectare", "isActive": true }
+  ]
+}

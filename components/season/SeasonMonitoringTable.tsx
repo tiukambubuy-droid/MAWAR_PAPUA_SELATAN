@@ -1,0 +1,30 @@
+"use client";
+import { useMemo, useState } from "react";
+import { phasePalette } from "@/lib/season-aggregations";
+import type { MonitoringRow } from "@/types/planting-season";
+
+function Sparkline({ values }: { values: number[] }) {
+  const max = Math.max(...values), min = Math.min(...values);
+  const points = values.map((value, index) => `${index * 10},${24 - ((value - min) / Math.max(1, max - min)) * 20}`).join(" ");
+  return <svg className="season-spark" viewBox="0 0 70 28"><polyline points={points} /></svg>;
+}
+
+export function SeasonMonitoringTable({ title, rows, entityLabel, onSelect, onDetail }: {
+  title: string; rows: MonitoringRow[]; entityLabel: string; onSelect: (name: string) => void; onDetail: (row: MonitoringRow) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [phase, setPhase] = useState("Semua");
+  const [sort, setSort] = useState("name");
+  const [page, setPage] = useState(1);
+  const filtered = useMemo(() => {
+    const next = rows.filter(row => row.name.toLowerCase().includes(query.toLowerCase()) && (phase === "Semua" || row.phase === phase));
+    return [...next].sort((a, b) => sort === "capaian" ? b.realized / b.target - a.realized / a.target : a.name.localeCompare(b.name, "id"));
+  }, [rows, query, phase, sort]);
+  const pages = Math.max(1, Math.ceil(filtered.length / 5));
+  const visible = filtered.slice((page - 1) * 5, page * 5);
+  return <article className="card season-table-card"><div className="season-section-title">{title}</div>
+    <div className="season-table-tools"><input aria-label={`Cari ${entityLabel}`} value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} placeholder={`Cari ${entityLabel.toLowerCase()}…`} /><select aria-label="Filter fase" value={phase} onChange={e => { setPhase(e.target.value); setPage(1); }}><option>Semua</option>{["Persemaian","Vegetatif","Generatif","Pematangan","Siap Panen"].map(item => <option key={item}>{item}</option>)}</select><select aria-label="Urutkan data" value={sort} onChange={e => setSort(e.target.value)}><option value="name">Urut nama</option><option value="capaian">Capaian tertinggi</option></select></div>
+    <div className="table-scroll"><table><thead><tr><th>{entityLabel}</th><th>Fase Dominan</th><th>Realisasi / Target</th><th>Capaian</th><th>Tren 4 Minggu</th><th>Estimasi Panen</th><th>Validasi</th><th>Aksi</th></tr></thead><tbody>{visible.map(row => { const pct = Math.round(row.realized / row.target * 100); return <tr key={row.id} onDoubleClick={() => onSelect(row.name)}><td><button className="season-row-link" onClick={() => onSelect(row.name)}>{row.name}</button><small>{row.groups} kelompok · {row.farmers} petani</small></td><td><span className="season-phase" style={{ color: phasePalette[row.phase], background: `${phasePalette[row.phase]}18` }}>{row.phase}</span></td><td><strong>{row.realized.toLocaleString("id-ID")} ha</strong><i className="thin-progress"><em style={{ width: `${pct}%` }} /></i><small>dari {row.target.toLocaleString("id-ID")} ha</small></td><td><b className={pct < 82 ? "low" : ""}>{pct}%</b></td><td><Sparkline values={row.trend} /></td><td>{row.harvest}</td><td><b>{row.validation}%</b></td><td><button className="season-eye" onClick={() => onDetail(row)} aria-label={`Lihat detail ${row.name}`}>◎</button></td></tr>; })}</tbody></table></div>
+    <div className="season-table-footer"><span>Menampilkan {filtered.length ? (page - 1) * 5 + 1 : 0}–{Math.min(page * 5, filtered.length)} dari {filtered.length} data</span><div><button disabled={page === 1} onClick={() => setPage(p => p - 1)}>‹</button>{Array.from({ length: pages }, (_, i) => <button className={page === i + 1 ? "active" : ""} onClick={() => setPage(i + 1)} key={i}>{i + 1}</button>)}<button disabled={page === pages} onClick={() => setPage(p => p + 1)}>›</button></div></div>
+  </article>;
+}

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "1.0.0",
+  "dataSources": [
+    { "id": "source-agriculture-office", "code": "DISTAN", "name": "Dinas Pertanian", "institution": "Dinas Pertanian Kabupaten Merauke", "dataType": ["land", "season", "production"], "isActive": true },
+    { "id": "source-bps", "code": "BPS", "name": "Badan Pusat Statistik", "institution": "BPS", "dataType": ["statistics", "production"], "isActive": true },
+    { "id": "source-bmkg", "code": "BMKG", "name": "BMKG", "institution": "Badan Meteorologi, Klimatologi, dan Geofisika", "dataType": ["weather", "risk"], "isActive": true },
+    { "id": "source-ppl", "code": "PPL", "name": "Petugas Penyuluh Lapangan", "institution": "Dinas Pertanian Kabupaten Merauke", "dataType": ["field-observation", "validation"], "isActive": true },
+    { "id": "source-field-verification", "code": "FIELD-VERIFY", "name": "Hasil Verifikasi Lapangan", "institution": "Tim Verifikasi SIPANGAN", "dataType": ["validation"], "isActive": true },
+    { "id": "source-sipangan", "code": "SIPANGAN", "name": "Sistem SIPANGAN", "institution": "Pemerintah Provinsi Papua Selatan", "dataType": ["calculation", "aggregation"], "isActive": true },
+    { "id": "source-simulation", "code": "SIMULATION", "name": "Data Simulasi Prototipe", "institution": "SIPANGAN", "dataType": ["demonstration"], "isActive": true }
+  ]
+}

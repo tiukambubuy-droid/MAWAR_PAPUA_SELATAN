@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "1.0.0",
+  "productionStatuses": [
+    { "id": "production-status-good", "code": "good", "name": "Baik", "color": "#159768", "minimumAchievement": 92, "maximumAchievement": 100, "description": "Produksi sesuai atau mendekati target." },
+    { "id": "production-status-alert", "code": "alert", "name": "Waspada", "color": "#E3B52B", "minimumAchievement": 86, "maximumAchievement": 91.99, "description": "Produksi memerlukan pemantauan agar target tetap dapat dicapai." },
+    { "id": "production-status-declining", "code": "declining", "name": "Produksi Turun", "color": "#EB8A2D", "minimumAchievement": 0, "maximumAchievement": 85.99, "description": "Produksi berada di bawah target atau musim sebelumnya." },
+    { "id": "production-status-crop-failure", "code": "crop-failure", "name": "Gagal Panen", "color": "#C7473F", "minimumAchievement": 0, "maximumAchievement": 100, "description": "Terdapat luas puso yang telah diverifikasi." }
+  ]
+}

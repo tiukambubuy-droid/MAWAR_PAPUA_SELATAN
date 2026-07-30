@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "1.0.0",
+  "plantingPhases": [
+    { "id": "phase-preparation", "code": "preparation", "name": "Persiapan", "order": 1, "color": "#AAB5B0", "description": "Penyiapan lahan sebelum persemaian atau penanaman.", "isActive": true },
+    { "id": "phase-nursery", "code": "nursery", "name": "Persemaian", "order": 2, "color": "#9CCC8A", "description": "Tahap penyemaian dan pemeliharaan bibit.", "isActive": true },
+    { "id": "phase-vegetative", "code": "vegetative", "name": "Vegetatif", "order": 3, "color": "#4EAD76", "description": "Tahap pertumbuhan batang dan daun.", "isActive": true },
+    { "id": "phase-generative", "code": "generative", "name": "Generatif", "order": 4, "color": "#E3C52C", "description": "Tahap pembentukan malai dan bulir.", "isActive": true },
+    { "id": "phase-maturing", "code": "maturing", "name": "Pematangan", "order": 5, "color": "#F08C22", "description": "Tahap pengisian dan pematangan bulir.", "isActive": true },
+    { "id": "phase-ready-to-harvest", "code": "ready-to-harvest", "name": "Siap Panen", "order": 6, "color": "#B77C1F", "description": "Tanaman telah mencapai kondisi siap dipanen.", "isActive": true },
+    { "id": "phase-post-harvest", "code": "post-harvest", "name": "Pascapanen", "order": 7, "color": "#6D8795", "description": "Tahap penanganan hasil setelah panen.", "isActive": true }
+  ]
+}

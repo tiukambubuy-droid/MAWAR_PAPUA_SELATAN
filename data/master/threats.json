@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1.0.0",
+  "threats": [
+    { "id": "threat-none", "code": "none", "name": "Tidak Ada Ancaman Signifikan", "category": "normal", "description": "Tidak ditemukan gangguan utama pada periode pemantauan.", "defaultRecommendation": "Lanjutkan pemantauan rutin.", "isActive": true },
+    { "id": "threat-flood", "code": "flood", "name": "Banjir/Genangan", "category": "climate", "description": "Genangan atau banjir mengganggu pertumbuhan dan panen.", "defaultRecommendation": "Perbaiki drainase dan lakukan verifikasi lapangan.", "isActive": true },
+    { "id": "threat-drought", "code": "drought", "name": "Kekeringan", "category": "climate", "description": "Ketersediaan air berada di bawah kebutuhan tanaman.", "defaultRecommendation": "Atur distribusi air dan jadwal irigasi.", "isActive": true },
+    { "id": "threat-heavy-rain", "code": "heavy-rain", "name": "Curah Hujan Tinggi", "category": "climate", "description": "Intensitas hujan meningkatkan risiko genangan dan penyakit.", "defaultRecommendation": "Pantau drainase dan kesehatan tanaman.", "isActive": true },
+    { "id": "threat-weather-anomaly", "code": "weather-anomaly", "name": "Anomali Cuaca", "category": "climate", "description": "Perubahan cuaca berada di luar pola musim normal.", "defaultRecommendation": "Sesuaikan jadwal tanam berdasarkan informasi BMKG.", "isActive": true },
+    { "id": "threat-pest", "code": "pest", "name": "Serangan Hama", "category": "organism", "description": "Populasi organisme pengganggu menurunkan kondisi tanaman.", "defaultRecommendation": "Lakukan pengendalian OPT terpadu.", "isActive": true },
+    { "id": "threat-disease", "code": "disease", "name": "Penyakit Tanaman", "category": "organism", "description": "Gejala penyakit teridentifikasi pada tanaman.", "defaultRecommendation": "Identifikasi penyakit dan lakukan penanganan terarah.", "isActive": true },
+    { "id": "threat-late-planting", "code": "late-planting", "name": "Keterlambatan Tanam", "category": "operation", "description": "Realisasi tanam tidak sesuai kalender yang ditetapkan.", "defaultRecommendation": "Evaluasi kesiapan lahan, benih, dan tenaga tanam.", "isActive": true },
+    { "id": "threat-harvest-area-decline", "code": "harvest-area-decline", "name": "Penurunan Luas Panen", "category": "production", "description": "Luas panen menurun dibandingkan target atau musim sebelumnya.", "defaultRecommendation": "Verifikasi penyebab penurunan luas panen.", "isActive": true },
+    { "id": "threat-irrigation", "code": "irrigation", "name": "Gangguan Irigasi", "category": "infrastructure", "description": "Jaringan atau distribusi air tidak bekerja optimal.", "defaultRecommendation": "Periksa dan perbaiki saluran irigasi.", "isActive": true }
+  ]
+}

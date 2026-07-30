@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "1.0.0",
+  "farmerGroups": [
+    { "id": "farmer-group-muram-sari-01", "code": "POKTAN-MUS-01", "name": "Poktan Tunas Harapan", "villageId": "village-muram-sari", "chairperson": "Ketua Kelompok 01", "memberCount": 28, "isActive": true },
+    { "id": "farmer-group-sidomulyo-01", "code": "POKTAN-SID-01", "name": "Poktan Maju Bersama", "villageId": "village-sidomulyo", "chairperson": "Ketua Kelompok 02", "memberCount": 31, "isActive": true },
+    { "id": "farmer-group-yasa-mulya-01", "code": "POKTAN-YAM-01", "name": "Poktan Mitra Tani", "villageId": "village-yasa-mulya", "chairperson": "Ketua Kelompok 03", "memberCount": 26, "isActive": true },
+    { "id": "farmer-group-sumber-mulya-01", "code": "POKTAN-SUM-01", "name": "Poktan Sumber Makmur", "villageId": "village-sumber-mulya", "chairperson": "Ketua Kelompok 04", "memberCount": 34, "isActive": true },
+    { "id": "farmer-group-rawasari-01", "code": "POKTAN-RAW-01", "name": "Poktan Harapan Jaya", "villageId": "village-rawasari", "chairperson": "Ketua Kelompok 05", "memberCount": 29, "isActive": true },
+    { "id": "farmer-group-wasur-01", "code": "POKTAN-WAS-01", "name": "Poktan Wasur Sejahtera", "villageId": "village-wasur", "chairperson": "Ketua Kelompok 06", "memberCount": 24, "isActive": true },
+    { "id": "farmer-group-kartini-01", "code": "POKTAN-KAR-01", "name": "Poktan Kartini Tani", "villageId": "village-kartini", "chairperson": "Ketua Kelompok 07", "memberCount": 30, "isActive": true }
+  ]
+}

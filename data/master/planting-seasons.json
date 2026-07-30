@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0.0",
+  "plantingSeasons": [
+    { "id": "season-2025-mt1", "code": "MT-I-2025", "name": "MT I 2025", "periodId": "period-2025", "commodityId": "commodity-paddy", "sequence": 1, "startDate": "2025-01-01", "endDate": "2025-05-31", "status": "completed", "isActive": false },
+    { "id": "season-2025-mt2", "code": "MT-II-2025", "name": "MT II 2025", "periodId": "period-2025", "commodityId": "commodity-paddy", "sequence": 2, "startDate": "2025-04-01", "endDate": "2025-10-31", "status": "completed", "isActive": false },
+    { "id": "season-2026-mt1", "code": "MT-I-2026", "name": "MT I 2026", "periodId": "period-2026", "commodityId": "commodity-paddy", "sequence": 1, "startDate": "2026-01-01", "endDate": "2026-05-31", "status": "completed", "isActive": false },
+    { "id": "season-2026-mt2", "code": "MT-II-2026", "name": "MT II 2026", "periodId": "period-2026", "commodityId": "commodity-paddy", "sequence": 2, "startDate": "2026-04-01", "endDate": "2026-10-31", "status": "ongoing", "isActive": true },
+    { "id": "season-2026-mt3", "code": "MT-III-2026", "name": "MT III 2026", "periodId": "period-2026", "commodityId": "commodity-paddy", "sequence": 3, "startDate": "2026-08-01", "endDate": "2026-12-31", "status": "upcoming", "isActive": false }
+  ]
+}

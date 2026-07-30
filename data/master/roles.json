@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "1.0.0",
+  "roles": [
+    { "id": "role-administrator", "code": "administrator", "name": "Administrator", "canEdit": true, "canValidate": true, "canViewExecutive": true },
+    { "id": "role-regency-operator", "code": "regency-operator", "name": "Operator Kabupaten", "canEdit": true, "canValidate": false, "canViewExecutive": false },
+    { "id": "role-district-operator", "code": "district-operator", "name": "Operator Distrik", "canEdit": true, "canValidate": false, "canViewExecutive": false },
+    { "id": "role-field-officer", "code": "field-officer", "name": "Petugas Lapangan/PPL", "canEdit": true, "canValidate": false, "canViewExecutive": false },
+    { "id": "role-validator", "code": "validator", "name": "Validator", "canEdit": false, "canValidate": true, "canViewExecutive": false },
+    { "id": "role-executive", "code": "executive", "name": "Pimpinan/Pembaca", "canEdit": false, "canValidate": false, "canViewExecutive": true }
+  ]
+}

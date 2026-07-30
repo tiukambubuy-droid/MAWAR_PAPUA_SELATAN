@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "1.0.0",
+  "users": [
+    { "id": "user-admin-001", "name": "Administrator SIPANGAN", "employeeId": null, "roleId": "role-administrator", "institution": "Pemerintah Provinsi Papua Selatan", "districtId": null, "phone": null, "email": "admin@sipangan.demo", "isActive": true },
+    { "id": "user-operator-merauke-001", "name": "Operator Kabupaten Merauke", "employeeId": null, "roleId": "role-regency-operator", "institution": "Dinas Pertanian Kabupaten Merauke", "districtId": null, "phone": null, "email": "operator.merauke@sipangan.demo", "isActive": true },
+    { "id": "user-ppl-semangga-001", "name": "PPL Distrik Semangga", "employeeId": null, "roleId": "role-field-officer", "institution": "Dinas Pertanian Kabupaten Merauke", "districtId": "district-semangga", "phone": null, "email": "ppl.semangga@sipangan.demo", "isActive": true },
+    { "id": "user-validator-001", "name": "Validator Data Pertanian", "employeeId": null, "roleId": "role-validator", "institution": "Dinas Pertanian Kabupaten Merauke", "districtId": null, "phone": null, "email": "validator@sipangan.demo", "isActive": true }
+  ]
+}

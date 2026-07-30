@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "1.0.0",
+  "scope": "Kabupaten Merauke",
+  "regions": [
+    { "id": "province-papua-selatan", "code": "PS", "name": "Papua Selatan", "type": "province", "parentId": null, "isActive": true, "hasData": true, "geometryId": "geo-papua-selatan" },
+    { "id": "regency-merauke", "code": "MER", "name": "Merauke", "type": "regency", "parentId": "province-papua-selatan", "isActive": true, "hasData": true, "geometryId": "geo-merauke" },
+    { "id": "regency-boven-digoel", "code": "BDG", "name": "Boven Digoel", "type": "regency", "parentId": "province-papua-selatan", "isActive": true, "hasData": false, "geometryId": "geo-boven-digoel" },
+    { "id": "regency-mappi", "code": "MAP", "name": "Mappi", "type": "regency", "parentId": "province-papua-selatan", "isActive": true, "hasData": false, "geometryId": "geo-mappi" },
+    { "id": "regency-asmat", "code": "ASM", "name": "Asmat", "type": "regency", "parentId": "province-papua-selatan", "isActive": true, "hasData": false, "geometryId": "geo-asmat" },
+
+    { "id": "district-semangga", "code": "SEM", "name": "Semangga", "type": "district", "parentId": "regency-merauke", "isActive": true, "hasData": true, "geometryId": "geo-semangga" },
+    { "id": "district-tanah-miring", "code": "TMI", "name": "Tanah Miring", "type": "district", "parentId": "regency-merauke", "isActive": true, "hasData": true, "geometryId": "geo-tanah-miring" },
+    { "id": "district-kurik", "code": "KUR", "name": "Kurik", "type": "district", "parentId": "regency-merauke", "isActive": true, "hasData": true, "geometryId": "geo-kurik" },
+    { "id": "district-malind", "code": "MAL", "name": "Malind", "type": "district", "parentId": "regency-merauke", "isActive": true, "hasData": true, "geometryId": "geo-malind" },
+    { "id": "district-merauke", "code": "DMR", "name": "Merauke", "type": "district", "parentId": "regency-merauke", "isActive": true, "hasData": true, "geometryId": "geo-district-merauke" },
+    { "id": "district-jagebob", "code": "JAG", "name": "Jagebob", "type": "district", "parentId": "regency-merauke", "isActive": true, "hasData": true, "geometryId": "geo-jagebob" },
+
+    { "id": "village-muram-sari", "code": "SEM-01", "name": "Muram Sari", "type": "village", "parentId": "district-semangga", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-sidomulyo", "code": "SEM-02", "name": "Sidomulyo", "type": "village", "parentId": "district-semangga", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-waninggap-kai", "code": "SEM-03", "name": "Waninggap Kai", "type": "village", "parentId": "district-semangga", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-kudo-jaya", "code": "SEM-04", "name": "Kudo Jaya", "type": "village", "parentId": "district-semangga", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-yanggandur", "code": "SEM-05", "name": "Yanggandur", "type": "village", "parentId": "district-semangga", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-marga-mulya-semangga", "code": "SEM-06", "name": "Marga Mulya", "type": "village", "parentId": "district-semangga", "isActive": true, "hasData": true, "geometryId": null },
+
+    { "id": "village-yasa-mulya", "code": "TMI-01", "name": "Yasa Mulya", "type": "village", "parentId": "district-tanah-miring", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-wanama", "code": "TMI-02", "name": "Wanama", "type": "village", "parentId": "district-tanah-miring", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-sumber-harapan", "code": "TMI-03", "name": "Sumber Harapan", "type": "village", "parentId": "district-tanah-miring", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-hidup-baru", "code": "TMI-04", "name": "Hidup Baru", "type": "village", "parentId": "district-tanah-miring", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-tambat", "code": "TMI-05", "name": "Tambat", "type": "village", "parentId": "district-tanah-miring", "isActive": true, "hasData": true, "geometryId": null },
+
+    { "id": "village-sumber-mulya", "code": "KUR-01", "name": "Sumber Mulya", "type": "village", "parentId": "district-kurik", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-harapan-makmur", "code": "KUR-02", "name": "Harapan Makmur", "type": "village", "parentId": "district-kurik", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-jaya-makmur", "code": "KUR-03", "name": "Jaya Makmur", "type": "village", "parentId": "district-kurik", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-candra-jaya", "code": "KUR-04", "name": "Candra Jaya", "type": "village", "parentId": "district-kurik", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-telaga-sari", "code": "KUR-05", "name": "Telaga Sari", "type": "village", "parentId": "district-kurik", "isActive": true, "hasData": true, "geometryId": null },
+
+    { "id": "village-rawasari", "code": "MAL-01", "name": "Rawasari", "type": "village", "parentId": "district-malind", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-padang-raharja", "code": "MAL-02", "name": "Padang Raharja", "type": "village", "parentId": "district-malind", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-suka-maju", "code": "MAL-03", "name": "Suka Maju", "type": "village", "parentId": "district-malind", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-bina-lahan", "code": "MAL-04", "name": "Bina Lahan", "type": "village", "parentId": "district-malind", "isActive": true, "hasData": true, "geometryId": null },
+
+    { "id": "village-wasur", "code": "DMR-01", "name": "Wasur", "type": "village", "parentId": "district-merauke", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-maro", "code": "DMR-02", "name": "Maro", "type": "village", "parentId": "district-merauke", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-samkai", "code": "DMR-03", "name": "Samkai", "type": "village", "parentId": "district-merauke", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-rimba-jaya", "code": "DMR-04", "name": "Rimba Jaya", "type": "village", "parentId": "district-merauke", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-kelapa-lima", "code": "DMR-05", "name": "Kelapa Lima", "type": "village", "parentId": "district-merauke", "isActive": true, "hasData": true, "geometryId": null },
+
+    { "id": "village-kartini", "code": "JAG-01", "name": "Kartini", "type": "village", "parentId": "district-jagebob", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-wenda-asri", "code": "JAG-02", "name": "Wenda Asri", "type": "village", "parentId": "district-jagebob", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-poo", "code": "JAG-03", "name": "Poo", "type": "village", "parentId": "district-jagebob", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-angger-permegi", "code": "JAG-04", "name": "Angger Permegi", "type": "village", "parentId": "district-jagebob", "isActive": true, "hasData": true, "geometryId": null },
+    { "id": "village-jagebob-raya", "code": "JAG-05", "name": "Jagebob Raya", "type": "village", "parentId": "district-jagebob", "isActive": true, "hasData": true, "geometryId": null }
+  ]
+}

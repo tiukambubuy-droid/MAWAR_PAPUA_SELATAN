@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "1.0.0",
+  "scope": "Kabupaten Merauke",
+  "isDummy": true,
+  "updatedAt": "2026-07-29T11:00:00+09:00",
+  "datasets": [
+    "regions.json",
+    "commodities.json",
+    "periods.json",
+    "planting-seasons.json",
+    "planting-phases.json",
+    "land-statuses.json",
+    "risk-levels.json",
+    "threats.json",
+    "production-statuses.json",
+    "units.json",
+    "data-sources.json",
+    "collection-methods.json",
+    "validation-statuses.json",
+    "roles.json",
+    "users.json",
+    "farmer-groups.json",
+    "reporting-calendar.json"
+  ]
+}

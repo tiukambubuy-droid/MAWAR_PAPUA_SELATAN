@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "plugins": []
+  },
+  "include": [
+    "lib/land-monitoring.ts",
+    "types/land-monitoring.ts",
+    "data/master/**/*.json",
+    "data/monitoring/land-monitoring.json"
+  ],
+  "exclude": [
+    "node_modules",
+    "db",
+    "worker"
+  ]
+}

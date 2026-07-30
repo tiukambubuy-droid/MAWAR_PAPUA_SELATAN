@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1.0.0",
+  "seasonId": "season-2026-mt2",
+  "calendar": [
+    { "id": "calendar-2026-04", "month": 4, "year": 2026, "activity": "Tanam Awal", "phaseId": "phase-nursery", "startDate": "2026-04-01", "endDate": "2026-04-30", "isCurrent": false },
+    { "id": "calendar-2026-05", "month": 5, "year": 2026, "activity": "Tanam", "phaseId": "phase-vegetative", "startDate": "2026-05-01", "endDate": "2026-05-31", "isCurrent": false },
+    { "id": "calendar-2026-06", "month": 6, "year": 2026, "activity": "Tanam Akhir", "phaseId": "phase-generative", "startDate": "2026-06-01", "endDate": "2026-06-30", "isCurrent": false },
+    { "id": "calendar-2026-07", "month": 7, "year": 2026, "activity": "Panen Awal", "phaseId": "phase-maturing", "startDate": "2026-07-01", "endDate": "2026-07-31", "isCurrent": true },
+    { "id": "calendar-2026-08", "month": 8, "year": 2026, "activity": "Panen Puncak", "phaseId": "phase-ready-to-harvest", "startDate": "2026-08-01", "endDate": "2026-08-31", "isCurrent": false },
+    { "id": "calendar-2026-09", "month": 9, "year": 2026, "activity": "Pascapanen", "phaseId": "phase-post-harvest", "startDate": "2026-09-01", "endDate": "2026-09-30", "isCurrent": false },
+    { "id": "calendar-2026-10", "month": 10, "year": 2026, "activity": "Persiapan MT III", "phaseId": "phase-preparation", "startDate": "2026-10-01", "endDate": "2026-10-31", "isCurrent": false }
+  ]
+}

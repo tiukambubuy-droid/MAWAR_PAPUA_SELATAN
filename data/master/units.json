@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "1.0.0",
+  "units": [
+    { "id": "unit-hectare", "code": "ha", "name": "Hektare", "symbol": "ha", "category": "area" },
+    { "id": "unit-ton", "code": "ton", "name": "Ton", "symbol": "ton", "category": "weight" },
+    { "id": "unit-ton-per-hectare", "code": "ton-ha", "name": "Ton per Hektare", "symbol": "ton/ha", "category": "productivity" },
+    { "id": "unit-percent", "code": "percent", "name": "Persentase", "symbol": "%", "category": "ratio" },
+    { "id": "unit-village", "code": "village", "name": "Kampung", "symbol": "kampung", "category": "count" },
+    { "id": "unit-district", "code": "district", "name": "Distrik", "symbol": "distrik", "category": "count" },
+    { "id": "unit-farmer", "code": "farmer", "name": "Petani", "symbol": "petani", "category": "count" }
+  ]
+}

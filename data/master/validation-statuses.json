@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0.0",
+  "validationStatuses": [
+    { "id": "validation-unverified", "code": "unverified", "name": "Belum Diverifikasi", "color": "#AAB5B0", "description": "Data belum melalui proses pemeriksaan." },
+    { "id": "validation-in-review", "code": "in-review", "name": "Dalam Verifikasi", "color": "#E3B52B", "description": "Data sedang diperiksa oleh petugas atau validator." },
+    { "id": "validation-verified", "code": "verified", "name": "Terverifikasi", "color": "#159768", "description": "Data telah diperiksa dan dinyatakan memenuhi ketentuan." },
+    { "id": "validation-rejected", "code": "rejected", "name": "Ditolak", "color": "#C7473F", "description": "Data tidak dapat digunakan karena tidak memenuhi ketentuan." },
+    { "id": "validation-needs-revision", "code": "needs-revision", "name": "Perlu Perbaikan", "color": "#EB8A2D", "description": "Data perlu dilengkapi atau diperbaiki sebelum diverifikasi." }
+  ]
+}

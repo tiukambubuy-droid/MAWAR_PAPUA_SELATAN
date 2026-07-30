@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "1.0.0",
+  "landStatuses": [
+    { "id": "land-status-good", "code": "good", "name": "Baik", "color": "#16A36F", "description": "Lahan aktif, kondisi lapangan baik, dan data memenuhi ambang validasi.", "isActive": true },
+    { "id": "land-status-alert", "code": "alert", "name": "Waspada", "color": "#E8A221", "description": "Terdapat indikator lapangan yang perlu dipantau lebih lanjut.", "isActive": true },
+    { "id": "land-status-verification-required", "code": "verification-required", "name": "Perlu Verifikasi", "color": "#D95D4F", "description": "Data atau kondisi lapangan belum memenuhi ambang verifikasi.", "isActive": true },
+    { "id": "land-status-inactive", "code": "inactive", "name": "Tidak Aktif", "color": "#AAB5B0", "description": "Lahan tidak tercatat aktif pada musim berjalan.", "isActive": true }
+  ]
+}
