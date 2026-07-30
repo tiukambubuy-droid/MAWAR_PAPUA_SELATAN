@@ -1,74 +1,11 @@
 {
-  "meta": {
-    "province": "Papua Selatan",
-    "regency": "Merauke",
-    "commodity": "Padi",
-    "updatedAt": "24 Juli 2026 · 20.15 WIT",
-    "sources": ["Dinas Pertanian", "BPS", "BMKG"],
-    "validation": 91
+  "deprecated": true,
+  "status": "inactive",
+  "replacement": {
+    "master": "data/master/data-foundation.json",
+    "land": "data/monitoring/land-monitoring.json",
+    "season": "data/monitoring/season-monitoring.json",
+    "production": "data/monitoring/production-monitoring.json"
   },
-  "dashboard": {
-    "period": "Januari–Juli 2026",
-    "activeSeason": "MT II · April–September",
-    "mappedLand": 156820,
-    "activeLand": 42680,
-    "landCondition": { "good": 34120, "warning": 6250, "critical": 2310 },
-    "dominantPhase": "Generatif",
-    "dominantPhasePercent": 68,
-    "harvestEstimate": "15 Agustus 2026",
-    "districtAgriculture": [
-      { "name": "Malind", "phase": "Vegetatif", "harvest": "September 2026" },
-      { "name": "Semangga", "phase": "Vegetatif", "harvest": "Agustus 2026" },
-      { "name": "Kurik", "phase": "Pematangan", "harvest": "Juli 2026" },
-      { "name": "Tanah Miring", "phase": "Generatif", "harvest": "Juli 2026" },
-      { "name": "Merauke", "phase": "Persiapan", "harvest": "Oktober 2026" },
-      { "name": "Jagebob", "phase": "Generatif", "harvest": "Agustus 2026" }
-    ],
-    "yearComparison": {
-      "planted": 8.4,
-      "harvested": 7.1,
-      "gkg": 9.6,
-      "productivity": 1.2,
-      "rice": 9.2
-    }
-  },
-  "plantingSeasons": [
-    { "id": "mt1-2026", "name": "MT I 2026", "year": 2026, "order": 1, "commodity": "Padi", "startDate": "2026-01-01", "endDate": "2026-05-31", "status": "Selesai", "target": 36500, "realized": 35120, "production": 183420 },
-    { "id": "mt2-2026", "name": "MT II 2026", "year": 2026, "order": 2, "commodity": "Padi", "startDate": "2026-04-01", "endDate": "2026-10-31", "status": "Berjalan", "target": 42680, "realized": 38180, "production": 198750 },
-    { "id": "mt3-2026", "name": "MT III 2026", "year": 2026, "order": 3, "commodity": "Padi", "startDate": "2026-08-01", "endDate": "2026-12-31", "status": "Terjadwal", "target": 28750, "realized": 0, "production": 0 },
-    { "id": "mt4-2026", "name": "MT IV 2026", "year": 2026, "order": 4, "commodity": "Padi", "startDate": "2026-10-01", "endDate": "2027-02-28", "status": "Draft", "target": 21400, "realized": 0, "production": 0 }
-  ],
-  "production": {
-    "riceConversion": 0.625,
-    "lossRate": 0.045,
-    "districts": [
-      { "name": "Malind", "villages": ["Bina Marga", "Sumber Makmur", "Marga Jaya", "Waniggap", "Malind Satu", "Sumber Rejeki", "Rawasari", "Padang Raharja", "Kumurde", "Dukmia"] },
-      { "name": "Semangga", "villages": ["Muram Sari", "Sidomulyo", "Waniggap Kai", "Kudo Jaya", "Yanggandur", "Semangga Jaya", "Marga Mulya", "Waninggap Nanggo"] },
-      { "name": "Kurik", "villages": ["Harapan Makmur", "Sumber Mulya", "Jaya Makmur", "Telaga Sari", "Salor Indah", "Kurik Makmur", "Candra Jaya", "Anumbob"] },
-      { "name": "Tanah Miring", "villages": ["Yasa Mulya", "Wanama", "Amunkay", "Hidup Baru", "Isano Mbias", "Yaba Maru", "Sarmayam Indah", "Soa"] },
-      { "name": "Merauke", "villages": ["Wasur", "Nasem", "Rawa Biru", "Urumb", "Kuper", "Kelapa Lima", "Maro", "Samkai"] },
-      { "name": "Jagebob", "villages": ["Kartini", "Angger Permegi", "Wenda Asri", "Yabamaru", "Kuper Jaya", "Jagebob Raya", "Marga Mulya", "Poo"] }
-    ],
-    "generation": {
-      "groupNames": ["Poktan Tunas Harapan", "Poktan Maju Bersama", "Poktan Mitra Tani"],
-      "harvestBase": 82,
-      "harvestRange": 260,
-      "yieldBase": 5.12,
-      "yieldRange": 73,
-      "validationBase": 82,
-      "validationRange": 16,
-      "trendFactors": [0.64, 0.73, 0.79, 0.88]
-    }
-  },
-  "regions": {
-    "districts": [
-      { "id": "d-1", "name": "Semangga", "villages": ["Muram Sari", "Sidomulyo", "Wanringgap Kai", "Kudo Jaya", "Yanggandur", "Marga Mulya"] },
-      { "id": "d-2", "name": "Tanah Miring", "villages": ["Yasa Mulya", "Wanama", "Sumber Harapan", "Hidup Baru", "Tambat"] },
-      { "id": "d-3", "name": "Kurik", "villages": ["Sumber Mulya", "Harapan Makmur", "Jaya Makmur", "Candra Jaya", "Telaga Sari"] },
-      { "id": "d-4", "name": "Malind", "villages": ["Rawasari", "Padang Raharja", "Suka Maju", "Bina Lahan"] },
-      { "id": "d-5", "name": "Merauke", "villages": ["Wasur", "Maro", "Samkai", "Rimba Jaya", "Kelapa Lima"] },
-      { "id": "d-6", "name": "Jagebob", "villages": ["Kartini", "Wenda Asri", "Poo", "Angger Permegi", "Jagebob Raya"] }
-    ],
-    "fieldNames": ["Hamparan Utara", "Kelompok Tani Makmur", "Hamparan Tengah", "Kelompok Tani Sejahtera", "Hamparan Selatan"]
-  }
+  "note": "Identitas visual SIPANGAN dipertahankan, tetapi file ini tidak lagi menjadi sumber data aktif."
 }

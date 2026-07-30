@@ -1,3 +1,10 @@
+import {
+  aggregateRegion,
+  getRegionById,
+  getRegionByName,
+  seasonRecords,
+  seasonSnapshots,
+} from "@/lib/data-foundation";
 import type { MonthObservation, MonitoringRow, PlantingPhase, PlantingSeason } from "@/types/planting-season";
 
 export const phasePalette: Record<PlantingPhase, string> = {
@@ -5,58 +12,80 @@ export const phasePalette: Record<PlantingPhase, string> = {
   Generatif: "#D9C954", Pematangan: "#DF963C", "Siap Panen": "#AD7927", Pascapanen: "#AAB7B0",
 };
 
-export const stableSeed = (value: string) => [...value].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+export const stableSeed = (value: string) =>
+  [...value].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) >>> 0, 17);
+
+const monthLabel = (period: string) =>
+  new Date(`${period}-01T00:00:00`).toLocaleDateString("id-ID", { month: "short" }).replace(".", "");
 
 export function seasonMonths(season: PlantingSeason, scopeKey: string): MonthObservation[] {
-  const start = new Date(`${season.startDate}T00:00:00`);
-  const end = new Date(`${season.endDate}T00:00:00`);
-  const months: Date[] = [];
-  const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
-  while (cursor <= end) {
-    months.push(new Date(cursor));
-    cursor.setMonth(cursor.getMonth() + 1);
-  }
-  const activities: PlantingPhase[] = ["Persiapan", "Persemaian", "Vegetatif", "Generatif", "Pematangan", "Siap Panen", "Pascapanen"];
-  const scale = Math.max(.05, Math.min(1, (stableSeed(scopeKey) % 52 + 48) / 100));
-  return months.map((date, index) => {
-    const ratio = (index + 1) / months.length;
-    const target = Math.round(season.target * scale * ratio);
-    const progressRatio = season.status === "Selesai" ? .96 : season.status === "Berjalan" ? Math.min(.93, ratio * 1.18) : ratio * .08;
-    const realized = Math.round(target * progressRatio);
+  void scopeKey;
+  const rows = seasonSnapshots.filter((snapshot) => snapshot.season_id === season.id && snapshot.kind === "actual");
+  const activities: PlantingPhase[] =
+    season.status === "Selesai"
+      ? ["Persiapan", "Persemaian", "Vegetatif", "Generatif", "Pematangan", "Pascapanen"]
+      : ["Persiapan", "Vegetatif", "Generatif", "Pematangan"];
+  return rows.map((snapshot, index) => ({
+    key: snapshot.period,
+    label: monthLabel(snapshot.period),
+    year: Number(snapshot.period.slice(0, 4)),
+    activity: activities[Math.min(index, activities.length - 1)],
+    progress: Math.round(snapshot.planting_realization_ha / Math.max(1, season.target) * 100),
+    focus: index < 2
+      ? "Percepatan persiapan dan tanam"
+      : index < rows.length - 1
+        ? "Pemantauan pertumbuhan, panen, dan kebutuhan air"
+        : season.status === "Selesai"
+          ? "Pascapanen dan evaluasi hasil"
+          : "Realisasi sampai batas pelaporan",
+    target: season.target,
+    realized: snapshot.planting_realization_ha,
+    projected: snapshot.planting_realization_ha,
+    validation: season.status === "Selesai" ? 93 : 91,
+  }));
+}
+
+export function monitoringRows(names: string[], scopeKey: string, seasonId = "MT2-2026"): MonitoringRow[] {
+  return names.map((name) => {
+    const region = getRegionById(scopeKey)?.name === name ? getRegionById(scopeKey) : getRegionByName(name);
+    const aggregate = aggregateRegion(region?.id ?? scopeKey, seasonId);
+    const record = seasonRecords.find(
+      (item) => item.season_id === seasonId && item.region_id === region?.id,
+    );
     return {
-      key: `${date.getFullYear()}-${date.getMonth()}`,
-      label: date.toLocaleDateString("id-ID", { month: "short" }).replace(".", ""),
-      year: date.getFullYear(),
-      activity: activities[Math.min(index, activities.length - 1)],
-      progress: Math.round(progressRatio * 100),
-      focus: index < 2 ? "Percepatan persiapan dan tanam" : index < 4 ? "Pemantauan pertumbuhan dan kebutuhan air" : index < 6 ? "Puncak panen awal di Kurik dan Tanah Miring" : "Pascapanen dan evaluasi hasil",
-      target, realized, projected: Math.round(target * Math.min(1, progressRatio + .14)),
-      validation: 82 + (stableSeed(scopeKey + index) % 15),
+      id: region?.id ?? `${scopeKey}:${name}`,
+      name,
+      phase: (record?.phase ?? "Vegetatif") as PlantingPhase,
+      target: aggregate.planting_target_ha,
+      realized: aggregate.planting_realization_ha,
+      validation: Math.round(aggregate.validation_rate),
+      harvest: seasonId === "MT2-2026" ? "Agustus–September 2026" : "Selesai Maret 2026",
+      farmers: Math.max(1, Math.round(aggregate.planting_realization_ha / 15)),
+      groups: Math.max(1, Math.round(aggregate.planting_realization_ha / 220)),
+      plantedAt: seasonId === "MT2-2026" ? "April–Juli 2026" : "Oktober 2025–Maret 2026",
+      updatedAt: seasonId === "MT2-2026" ? "24 Juli 2026" : "31 Maret 2026",
+      trend: [34, 45, 57, 69, 82, 91],
     };
   });
 }
 
-export function monitoringRows(names: string[], scopeKey: string): MonitoringRow[] {
-  const phases: PlantingPhase[] = ["Vegetatif", "Generatif", "Pematangan", "Siap Panen", "Persemaian"];
-  return names.map((name, index) => {
-    const seed = stableSeed(`${scopeKey}-${name}`);
-    const target = 320 + seed % 720;
-    const realized = Math.round(target * (.72 + (seed % 24) / 100));
-    return {
-      id: `${scopeKey}-${name}`, name, phase: phases[seed % phases.length], target, realized,
-      validation: 78 + seed % 20,
-      harvest: index < 4
-        ? `${28 + index} Jul – ${5 + index} Agu 2026`
-        : `${1 + (index - 4)} Agu – ${9 + (index - 4)} Agu 2026`,
-      farmers: 30 + seed % 120, groups: 2 + seed % 8, plantedAt: `${4 + index} Mei 2026`,
-      updatedAt: `${1 + index} jam lalu`, trend: [34, 45, 41, 57, 54, 69, 65, 82].map(v => Math.min(98, v + seed % 11)),
-    };
+export function phaseComposition(scopeKey: string, _monthIndex: number, seasonId = "MT2-2026") {
+  const scope = getRegionById(scopeKey);
+  const records = seasonRecords.filter((record) => {
+    if (record.season_id !== seasonId || record.validation_status !== "approved") return false;
+    if (scope?.administrative_type === "regency") return true;
+    if (scope?.administrative_type === "district") return getRegionById(record.region_id)?.parent_id === scopeKey;
+    return record.region_id === scopeKey;
   });
-}
-
-export function phaseComposition(scopeKey: string, monthIndex: number) {
-  const base = [7, 38, 25, 18, 12];
-  const shift = (stableSeed(scopeKey) + monthIndex) % base.length;
-  const labels: PlantingPhase[] = ["Persemaian", "Vegetatif", "Generatif", "Pematangan", "Siap Panen"];
-  return labels.map((phase, i) => ({ phase, value: base[(i + shift) % base.length] }));
+  const phases: PlantingPhase[] = ["Persemaian", "Vegetatif", "Generatif", "Pematangan", "Siap Panen"];
+  const totals = new Map<PlantingPhase, number>(phases.map((phase) => [phase, 0]));
+  records.forEach((record) => {
+    const phase = phases.includes(record.phase as PlantingPhase) ? record.phase as PlantingPhase : "Vegetatif";
+    totals.set(phase, (totals.get(phase) ?? 0) + record.planting_realization_ha);
+  });
+  const grandTotal = [...totals.values()].reduce((sum, value) => sum + value, 0);
+  if (!grandTotal) return phases.map((phase, index) => ({ phase, value: index === 1 ? 100 : 0 }));
+  const values = phases.map((phase) => ({ phase, value: (totals.get(phase) ?? 0) / grandTotal * 100 }));
+  values[values.length - 1].value += 100 - values.reduce((sum, item) => sum + item.value, 0);
+  return values;
 }

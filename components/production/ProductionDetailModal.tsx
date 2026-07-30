@@ -8,6 +8,7 @@ import {
   Printer, Scale, Sprout, Target, TrendingDown, TrendingUp, Wheat, X,
 } from "lucide-react";
 import type { ProductionRecord } from "@/types/production";
+import type { Season } from "@/lib/data-foundation";
 
 const number = (value: number, decimals = 0) =>
   value.toLocaleString("id-ID", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
@@ -16,10 +17,11 @@ function recordSeed(row: ProductionRecord) {
   return [...row.name].reduce((sum, char) => sum + char.charCodeAt(0), 0);
 }
 
-export function ProductionDetailModal({ row, district, village, onClose }: {
+export function ProductionDetailModal({ row, district, village, season, onClose }: {
   row: ProductionRecord;
   district: string;
   village: string;
+  season: Season | null;
   onClose: () => void;
 }) {
   const achievement = row.gkg / row.target * 100;
@@ -42,10 +44,10 @@ export function ProductionDetailModal({ row, district, village, onClose }: {
         ? ["Curah hujan tinggi dan keterlambatan tanam.", "Penurunan luas panen.", "Produktivitas belum merata."]
         : ["Pengendalian hama perlu diperkuat.", "Keterlambatan tanam pada sebagian areal.", "Validasi hasil timbang belum merata."];
   const previous = [0.84, 0.89, 0.93, 1].map(factor => Math.round(row.gkg * factor));
-  const comparisonLabels = ["MT I 2025", "MT II 2025", "MT I 2026", "MT II 2026 (berjalan)"];
+  const comparisonLabels = ["MT I 2025", "MT II 2025", "Musim sebelumnya", season?.display_name ?? "Musim aktif"];
   const maxComparison = Math.max(...previous);
   const change = (previous[3] - previous[2]) / previous[2] * 100;
-  const selectedVillage = row.level === "Kampung" ? row.name : village === "Semua Kampung" ? row.name : village;
+  const selectedVillage = row.level === "Kampung" || row.level === "Kelurahan" ? row.name : village === "Semua Kampung" ? row.name : village;
   const selectedDistrict = row.level === "Distrik" ? row.name : district;
 
   useEffect(() => {
@@ -77,8 +79,8 @@ export function ProductionDetailModal({ row, district, village, onClose }: {
             <div>
               <span><MapPinned size={14} /> Distrik {selectedDistrict}</span>
               <span>Kabupaten Merauke</span>
-              <span><Sprout size={14} /> MT II</span>
-              <span><CalendarDays size={14} /> 2026</span>
+              <span><Sprout size={14} /> {season?.name}</span>
+              <span><CalendarDays size={14} /> {season?.year}</span>
             </div>
           </div>
           <div className="production-detail-header-actions">

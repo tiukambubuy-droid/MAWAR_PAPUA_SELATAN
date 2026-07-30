@@ -4,11 +4,15 @@ export type PlantingPhase = "Persiapan" | "Persemaian" | "Vegetatif" | "Generati
 export type PlantingSeason = {
   id: string;
   name: string;
+  displayName?: string;
   year: number;
   order: number;
   commodity: string;
+  commodityId?: string;
+  regencyId?: string;
   startDate: string;
   endDate: string;
+  reportingCutoff?: string;
   status: SeasonStatus;
   target: number;
   realized: number;
@@ -20,6 +24,7 @@ export type RegionNode = {
   name: string;
   type: "regency" | "district" | "village" | "field";
   parentId?: string;
+  administrativeType?: "kampung" | "kelurahan";
 };
 
 export type MonthObservation = {

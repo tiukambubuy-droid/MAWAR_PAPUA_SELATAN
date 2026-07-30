@@ -1,5 +1,5 @@
 import { phasePalette } from "@/lib/season-aggregations";
-import { formatNumber } from "@/lib/season-formatters";
+import { formatNumber, formatPercent } from "@/lib/season-formatters";
 import type { PlantingPhase } from "@/types/planting-season";
 
 export function PhaseCompositionChart({ values, previousValues, total, label, validation, previousLabel }: {
@@ -10,8 +10,10 @@ export function PhaseCompositionChart({ values, previousValues, total, label, va
   validation: number;
   previousLabel?: string;
 }) {
-  let cursor = 0;
-  const gradient = values.map(item => { const start = cursor; cursor += item.value; return `${phasePalette[item.phase]} ${start}% ${cursor}%`; }).join(",");
+  const gradient = values.map((item, index) => {
+    const start = values.slice(0, index).reduce((sum, value) => sum + value.value, 0);
+    return `${phasePalette[item.phase]} ${start}% ${start + item.value}%`;
+  }).join(",");
   const enriched = values.map(item => ({ ...item, area: Math.round(total * item.value / 100) }));
   const dominant = enriched.reduce((best, item) => item.value > best.value ? item : best, enriched[0]);
   const ripening = enriched.find(item => item.phase === "Pematangan");
@@ -40,7 +42,7 @@ export function PhaseCompositionChart({ values, previousValues, total, label, va
         <div className="phase-list">
           {enriched.map(item => <div key={item.phase}>
             <span className="phase-name"><i style={{ background: phasePalette[item.phase] }} />{item.phase}</span>
-            <span className="phase-percent"><em><b style={{ width: `${item.value}%`, background: phasePalette[item.phase] }} /></em><strong>{item.value}%</strong></span>
+            <span className="phase-percent"><em><b style={{ width: `${item.value}%`, background: phasePalette[item.phase] }} /></em><strong>{formatPercent(item.value)}</strong></span>
             <strong>{formatNumber(item.area)}</strong>
           </div>)}
         </div>
@@ -50,11 +52,11 @@ export function PhaseCompositionChart({ values, previousValues, total, label, va
       <aside className="phase-insight-panel" aria-label="Insight komposisi fase">
         <div className="phase-insight">
           <i className="dominant" aria-hidden="true">★</i>
-          <div><span>FASE DOMINAN</span><strong>{dominant.phase}</strong><small>{formatNumber(dominant.area)} ha · {dominant.value}%</small></div>
+          <div><span>FASE DOMINAN</span><strong>{dominant.phase}</strong><small>{formatNumber(dominant.area)} ha · {formatPercent(dominant.value)}</small></div>
         </div>
         <div className="phase-insight">
           <i className="harvest" aria-hidden="true">♨</i>
-          <div><span>MENUJU PANEN</span><strong>{formatNumber(harvestArea)} ha</strong><small>{harvestPercent}% dari luas dipantau</small></div>
+          <div><span>MENUJU PANEN</span><strong>{formatNumber(harvestArea)} ha</strong><small>{formatPercent(harvestPercent)} dari luas dipantau</small></div>
         </div>
         <div className="phase-insight">
           <i className="change" aria-hidden="true">↗</i>

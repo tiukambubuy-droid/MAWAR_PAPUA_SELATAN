@@ -2,7 +2,8 @@
 import { useMemo, useState } from "react";
 import { plantingSeasons as initialSeasons } from "@/data/planting-seasons";
 import { fieldsForVillage, regions } from "@/data/regions";
-import { monitoringRows, phaseComposition, seasonMonths, stableSeed } from "@/lib/season-aggregations";
+import { monitoringRows, phaseComposition, seasonMonths } from "@/lib/season-aggregations";
+import { aggregateRegion, getDefaultSeasonSnapshot, getSeasonKpis } from "@/lib/data-foundation";
 import { buildSeasonInsights } from "@/lib/season-insights";
 import type { MonitoringRow, PlantingSeason } from "@/types/planting-season";
 import { ManageSeasonModal } from "./ManageSeasonModal";
@@ -20,7 +21,7 @@ import { SeasonSummaryCards } from "./SeasonSummaryCards";
 export default function SeasonPage() {
   const [seasons, setSeasons] = useState<PlantingSeason[]>(initialSeasons);
   const [year, setYear] = useState(2026);
-  const [seasonId, setSeasonId] = useState("mt2-2026");
+  const [seasonId, setSeasonId] = useState("MT2-2026");
   const [district, setDistrict] = useState("Semangga");
   const [village, setVillage] = useState("all");
   const [activeMonth, setActiveMonth] = useState(3);
@@ -36,25 +37,38 @@ export default function SeasonPage() {
   const selectedVillage = villages.find(item => item.name === village);
   const scope = village !== "all" ? `Kampung ${village}` : district !== "all" ? `Distrik ${district}` : "Kabupaten Merauke";
   const scopeKey = selectedVillage?.id ?? selectedDistrict?.id ?? "merauke";
-  const scale = village !== "all" ? .035 + stableSeed(scopeKey) % 20 / 1000 : district !== "all" ? .14 + stableSeed(scopeKey) % 12 / 100 : 1;
-  const months = useMemo(() => selectedSeason ? seasonMonths(selectedSeason, scopeKey) : [], [selectedSeason, scopeKey]);
+  const regencyTotal = selectedSeason ? aggregateRegion("93.01", selectedSeason.id).planting_realization_ha : 0;
+  const scopeTotal = selectedSeason ? aggregateRegion(scopeKey, selectedSeason.id).planting_realization_ha : 0;
+  const scale = regencyTotal ? scopeTotal / regencyTotal : 0;
+  const months = selectedSeason ? seasonMonths(selectedSeason, scopeKey) : [];
   const safeMonth = Math.min(activeMonth, Math.max(0, months.length - 1));
   const month = months[safeMonth];
+  const scopeKpis = selectedSeason ? getSeasonKpis(selectedSeason.id, scopeKey) : null;
   const rowNodes = village !== "all" && selectedVillage ? fieldsForVillage(selectedVillage.id) : district !== "all" ? villages : districts;
-  const rows = useMemo(() => monitoringRows(rowNodes.map(item => item.name), scopeKey), [rowNodes, scopeKey]);
-  const composition = phaseComposition(scopeKey, safeMonth);
-  const previousComposition = phaseComposition(scopeKey, Math.max(0, safeMonth - 1));
+  const rows = monitoringRows(rowNodes.map(item => item.name), scopeKey, selectedSeason?.id);
+  const composition = phaseComposition(scopeKey, safeMonth, selectedSeason?.id);
+  const previousComposition = phaseComposition(scopeKey, Math.max(0, safeMonth - 1), selectedSeason?.id);
   const insights = month ? buildSeasonInsights(rows, month, scope) : [];
-  const tableTitle = village !== "all" ? `RINCIAN HAMPARAN/KELOMPOK TANI — KAMPUNG ${village.toUpperCase()}` : district !== "all" ? `REALISASI TANAM PER KAMPUNG — DISTRIK ${district.toUpperCase()}` : "REALISASI TANAM PER DISTRIK — KABUPATEN MERAUKE";
-  const entityLabel = village !== "all" ? "Hamparan/Kelompok Tani" : district !== "all" ? "Kampung" : "Distrik";
+  const tableTitle = village !== "all" ? `RINCIAN DATA — KAMPUNG/KELURAHAN ${village.toUpperCase()}` : district !== "all" ? `REALISASI TANAM PER KAMPUNG/KELURAHAN — DISTRIK ${district.toUpperCase()}` : "REALISASI TANAM PER DISTRIK — KABUPATEN MERAUKE";
+  const entityLabel = village !== "all" ? "Kampung/Kelurahan" : district !== "all" ? "Kampung/Kelurahan" : "Distrik";
 
   const changeYear = (next: number) => {
     setYear(next);
     const first = seasons.find(item => item.year === next);
     setSeasonId(first?.id ?? "all");
-    setActiveMonth(0);
+    const snapshot = first ? getDefaultSeasonSnapshot(first.id) : null;
+    const nextMonths = first ? seasonMonths(first, scopeKey) : [];
+    const defaultIndex = snapshot ? nextMonths.findIndex(item => item.key === snapshot.period) : -1;
+    setActiveMonth(defaultIndex >= 0 ? defaultIndex : 0);
   };
-  const changeSeason = (next: string) => { setSeasonId(next); setActiveMonth(0); };
+  const changeSeason = (next: string) => {
+    setSeasonId(next);
+    const snapshot = getDefaultSeasonSnapshot(next);
+    const nextSeason = seasons.find(item => item.id === next);
+    const nextMonths = nextSeason ? seasonMonths(nextSeason, scopeKey) : [];
+    const defaultIndex = snapshot ? nextMonths.findIndex(item => item.key === snapshot.period) : -1;
+    setActiveMonth(defaultIndex >= 0 ? defaultIndex : 0);
+  };
   const changeDistrict = (next: string) => { setDistrict(next); setVillage("all"); };
   const addSeason = (item: PlantingSeason) => { setSeasons(current => [...current, item]); setYear(item.year); setSeasonId(item.id); setActiveMonth(0); };
   const selectRow = (name: string) => {
@@ -72,7 +86,14 @@ export default function SeasonPage() {
     {comparisonMode ? <AllSeasonComparison seasons={yearSeasons} /> : selectedSeason && month && <>
       <SeasonCalendar title={selectedSeason.name} months={months} active={safeMonth} onSelect={setActiveMonth} />
       <section className="season-analytics-grid">
-        <SeasonSummaryCards title={selectedSeason.name} month={month} scale={scale} scope={scope} />
+        <SeasonSummaryCards
+          title={selectedSeason.name}
+          month={month}
+          scale={scale}
+          scope={scope}
+          production={scopeKpis?.aggregate.gkg_production_ton ?? 0}
+          rice={scopeKpis?.estimated_rice_ton ?? 0}
+        />
         <SeasonProgressChart months={months} active={safeMonth} title={selectedSeason.name} scale={scale} />
         <PhaseCompositionChart
           values={composition}
@@ -85,7 +106,7 @@ export default function SeasonPage() {
       </section>
       <section className="season-bottom-grid">
         <SeasonMonitoringTable title={tableTitle} rows={rows} entityLabel={entityLabel} onSelect={selectRow} onDetail={setDetail} />
-        <SeasonInsights insights={insights} production={Math.round(month.realized * scale * 4.95)} rice={Math.round(month.realized * scale * 3.05)} />
+        <SeasonInsights insights={insights} production={Math.round(scopeKpis?.aggregate.gkg_production_ton ?? 0)} rice={Math.round(scopeKpis?.estimated_rice_ton ?? 0)} />
       </section>
     </>}
     {manageOpen && <ManageSeasonModal onClose={() => setManageOpen(false)} onAdd={addSeason} />}

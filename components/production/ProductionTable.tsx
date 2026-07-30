@@ -7,10 +7,12 @@ import type { ProductionRecord } from "@/types/production";
 export function ProductionTable({
   records,
   scope,
+  seasonName,
   onSelect,
 }: {
   records: ProductionRecord[];
   scope: string;
+  seasonName: string;
   onSelect: (row: ProductionRecord) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -37,7 +39,7 @@ export function ProductionTable({
   return (
     <article className="card production-table-card">
       <div className="production-card-title">
-        PRODUKSI PER {records[0]?.level.toUpperCase() ?? "WILAYAH"} — {scope.toUpperCase()} — MT II 2026
+        PRODUKSI PER {records[0]?.level.toUpperCase() ?? "WILAYAH"} — {scope.toUpperCase()} — {seasonName.toUpperCase()}
       </div>
       <div className="production-table-tools">
         <input

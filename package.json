@@ -9,7 +9,7 @@
   "dev": "next dev",
   "build": "next build",
   "start": "next start",
-  "test": "next build && node --test tests/rendered-html.test.mjs",
+  "test": "next build && node --test tests/*.test.mjs",
   "lint": "eslint ."
   },
   "dependencies": {

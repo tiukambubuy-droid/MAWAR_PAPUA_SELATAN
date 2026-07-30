@@ -6,23 +6,31 @@ import { createPortal } from "react-dom";
 import SeasonCommandCenter from "@/components/season/SeasonPage";
 import ProductionCommandCenter from "@/components/production/ProductionPage";
 import ExecutiveDashboard from "@/components/overview/ExecutiveDashboard";
-import sipangan from "@/data/sipangan.json";
 import { recordsForScope as sharedProductionRecords } from "@/lib/production-data";
+import {
+  aggregateRegion,
+  compactYieldNote,
+  getActiveMonitoringRegionCounts,
+  getChildrenByRegionId,
+  getRegionByName,
+} from "@/lib/data-foundation";
+
+const activeRegionCounts = getActiveMonitoringRegionCounts();
 
 const districts = [
-  { name: "Merauke", x: 67, y: 70, value: "46.820 ton", risk: "Aman" },
-  { name: "Semangga", x: 45, y: 48, value: "38.240 ton", risk: "Waspada" },
-  { name: "Tanah Miring", x: 65, y: 39, value: "32.610 ton", risk: "Waspada" },
-  { name: "Kurik", x: 77, y: 28, value: "28.400 ton", risk: "Tinggi" },
-  { name: "Malind", x: 35, y: 67, value: "21.550 ton", risk: "Aman" },
+  { name: "Merauke", x: 67, y: 70, value: "Data teragregasi", risk: "Aman" },
+  { name: "Semangga", x: 45, y: 48, value: "Data teragregasi", risk: "Waspada" },
+  { name: "Tanah Miring", x: 65, y: 39, value: "Data teragregasi", risk: "Waspada" },
+  { name: "Kurik", x: 77, y: 28, value: "Data teragregasi", risk: "Tinggi" },
+  { name: "Malind", x: 35, y: 67, value: "Data teragregasi", risk: "Aman" },
 ];
 
 const metrics = [
-  { icon: "↗", label: "Luas Tanam", value: "42.680", unit: "ha", change: "+8,4%" },
-  { icon: "⌁", label: "Luas Panen", value: "35.240", unit: "ha", change: "+7,1%" },
-  { icon: "◉", label: "Produksi GKG", value: "198.750", unit: "ton", change: "+9,6%" },
-  { icon: "▥", label: "Produktivitas", value: "5,64", unit: "ton/ha", change: "+1,2%" },
-  { icon: "●", label: "Estimasi Beras", value: "126.206", unit: "ton", change: "+9,2%" },
+  { icon: "↗", label: "Luas Tanam", value: "38.180", unit: "ha", change: "+8,4%" },
+  { icon: "⌁", label: "Luas Panen", value: "31.854", unit: "ha", change: "+7,1%" },
+  { icon: "◉", label: "Produksi GKG", value: "174.577", unit: "ton", change: "+9,6%" },
+  { icon: "▥", label: "Produktivitas", value: "5,48", unit: "ton/ha", change: "+1,2%" },
+  { icon: "●", label: "Estimasi Beras", value: "110.664", unit: "ton", change: compactYieldNote },
 ];
 
 const nav = [
@@ -40,20 +48,16 @@ type LandLayer = "Luas Tanam" | "Fase Tanam" | "Tingkat Risiko";
 type LandTableRow = { cells: string[]; statusIndex: number; validationIndex: number };
 
 const regencyRows: LandTableRow[] = [
-  { cells: ["Merauke", "22 distrik", "42.680 ha", "35.240 ha", "198.750 ton", "Aktif", "86%"], statusIndex: 5, validationIndex: 6 },
-  { cells: ["Boven Digoel", "20 distrik", "6.420 ha", "4.880 ha", "24.630 ton", "Pengembangan", "58%"], statusIndex: 5, validationIndex: 6 },
-  { cells: ["Mappi", "15 distrik", "4.760 ha", "3.510 ha", "17.420 ton", "Pengembangan", "52%"], statusIndex: 5, validationIndex: 6 },
-  { cells: ["Asmat", "25 distrik", "2.140 ha", "1.360 ha", "6.780 ton", "Pengembangan", "41%"], statusIndex: 5, validationIndex: 6 },
+  { cells: ["Merauke", "22 distrik", "38.180 ha", "31.854 ha", "174.577 ton", "Aktif", "91%"], statusIndex: 5, validationIndex: 6 },
 ];
-
-const villageNames = Array.from(new Set(sipangan.production.districts.flatMap(item => item.villages)));
 
 function seededNumber(name: string) {
   return [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0);
 }
 
 function districtVillageCount(name: string) {
-  return 4 + seededNumber(name) % 13;
+  const district = getRegionByName(name, "district");
+  return district ? getChildrenByRegionId(district.id).length : 0;
 }
 
 const plantingPhases = ["Persiapan", "Persemaian", "Vegetatif", "Generatif", "Pematangan", "Siap Panen"];
@@ -146,19 +150,20 @@ function makeDistrictRows(names: string[]): LandTableRow[] {
 }
 
 function makeVillageRows(district: string): LandTableRow[] {
-  const seed = seededNumber(district);
-  const count = districtVillageCount(district);
-  return Array.from({ length: count }, (_, index) => {
-    const village = villageNames[(seed + index) % villageNames.length];
-    const validation = 66 + (seed + index * 7) % 31;
+  const districtRegion = getRegionByName(district, "district");
+  const children = districtRegion ? getChildrenByRegionId(districtRegion.id) : [];
+  return children.map((region, index) => {
+    const aggregate = aggregateRegion(region.id, "MT2-2026");
+    const seed = seededNumber(region.id);
+    const validation = Math.round(aggregate.validation_rate);
     const status = validation >= 86 ? "Baik" : validation >= 74 ? "Waspada" : "Verifikasi";
     return {
       cells: [
-        village,
-        `${(420 + (seed * (index + 3)) % 1320).toLocaleString("id-ID")} ha`,
-        `${(310 + (seed * (index + 5)) % 1050).toLocaleString("id-ID")} ha`,
+        region.name,
+        `${aggregate.mapped_land_ha.toLocaleString("id-ID")} ha`,
+        `${aggregate.planting_realization_ha.toLocaleString("id-ID")} ha`,
         ["Persiapan", "Vegetatif", "Generatif", "Pematangan"][(seed + index) % 4],
-        `${(1650 + seed * (index + 2) % 6900).toLocaleString("id-ID")} ton`,
+        `${aggregate.gkg_production_ton.toLocaleString("id-ID")} ton`,
         status,
         `${validation}%`,
       ],
@@ -177,20 +182,6 @@ const productionRows = sharedDistrictRows.map(row => ({
   rice: Math.round(row.rice).toLocaleString("id-ID"),
   target: Math.round(row.gkg / row.target * 100),
 }));
-const totalDistrictHarvest = sharedDistrictRows.reduce((sum, row) => sum + row.harvested, 0);
-const seasonRows = sipangan.dashboard.districtAgriculture.map(item => {
-  const production = sharedDistrictRows.find(row => row.name === item.name);
-  const ratio = (production?.harvested ?? 0) / Math.max(1, totalDistrictHarvest);
-  const planned = Math.round(sipangan.dashboard.activeLand * ratio);
-  return {
-    district: item.name,
-    planned,
-    planted: Math.round(planned * .91),
-    phase: item.phase,
-    harvest: item.harvest,
-  };
-});
-
 function PageTitle({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
   return (
     <section className="page-heading subpage-heading">
@@ -576,8 +567,8 @@ function LandPage() {
       : mapContext.selectedName
         ? makeVillageRows(mapContext.selectedName).map(row => row.cells[0])
         : mapContext.districtNames;
-    const areaLabel = mapContext.level === "province" ? "Kabupaten" : mapContext.selectedName ? "Kampung/Sentra" : "Distrik";
-    const countLabel = mapContext.level === "province" ? "Jumlah Distrik" : mapContext.selectedName ? "Cakupan" : "Jumlah Kampung";
+    const areaLabel = mapContext.level === "province" ? "Kabupaten" : mapContext.selectedName ? "Kampung/Kelurahan" : "Distrik";
+    const countLabel = mapContext.level === "province" ? "Jumlah Distrik" : mapContext.selectedName ? "Cakupan" : "Jumlah Kampung/Kelurahan";
     const scopeTitle = mapContext.level === "province"
       ? "KABUPATEN MERAUKE"
       : mapContext.selectedName ? `DISTRIK ${mapContext.selectedName.toUpperCase()}` : "KABUPATEN MERAUKE";
@@ -630,12 +621,12 @@ function LandPage() {
     };
     if (!mapContext.selectedName) return {
       title: "REKAP DISTRIK KABUPATEN MERAUKE",
-      headers: ["Distrik", "Jumlah Kampung", "Luas Tanam", "Luas Panen", "Produksi GKG", "Kondisi", "Validasi"],
+      headers: ["Distrik", "Jumlah Kampung/Kelurahan", "Luas Tanam", "Luas Panen", "Produksi GKG", "Kondisi", "Validasi"],
       rows: makeDistrictRows(mapContext.districtNames),
     };
     return {
       title: `DAFTAR KAMPUNG TERPANTAU — DISTRIK ${mapContext.selectedName.toUpperCase()}`,
-      headers: ["Kampung/Sentra", "Luas Lahan", "Luas Tanam", "Fase Tanam", "Produksi GKG", "Status", "Validasi"],
+      headers: ["Kampung/Kelurahan", "Luas Lahan", "Luas Tanam", "Fase Tanam", "Produksi GKG", "Status", "Validasi"],
       rows: makeVillageRows(mapContext.selectedName),
     };
   }, [layer, mapContext]);
@@ -645,7 +636,7 @@ function LandPage() {
       mapped: "48.920",
       active: "42.680",
       verified: 86,
-      coverage: "22 distrik · 78 kampung",
+      coverage: `${activeRegionCounts.districts} distrik aktif · ${activeRegionCounts.settlements} kampung/kelurahan terpantau`,
       good: 78,
       watch: 16,
       verify: 6,
@@ -655,7 +646,7 @@ function LandPage() {
       mapped: "48.920",
       active: "42.680",
       verified: 86,
-      coverage: "22 distrik · 78 kampung",
+      coverage: `${activeRegionCounts.districts} distrik aktif · ${activeRegionCounts.settlements} kampung/kelurahan terpantau`,
       good: 78,
       watch: 16,
       verify: 6,
@@ -670,7 +661,7 @@ function LandPage() {
       mapped: (1600 + seed % 3900).toLocaleString("id-ID"),
       active: (1200 + seed % 3100).toLocaleString("id-ID"),
       verified,
-      coverage: `${districtVillageCount(mapContext.selectedName)} kampung terpantau`,
+      coverage: `${districtVillageCount(mapContext.selectedName)} kampung/kelurahan terpantau`,
       good,
       watch,
       verify,
@@ -916,7 +907,7 @@ function ProductionPage() {
 
 export default function Home() {
   const [activeNav, setActiveNav] = useState("Ringkasan");
-  const [period, setPeriod] = useState("Januari–Juli 2026");
+  const [period, setPeriod] = useState("MT II 2026");
   const [district, setDistrict] = useState("Kabupaten Merauke");
   const [selected, setSelected] = useState(districts[0]);
   const [showAlerts, setShowAlerts] = useState(false);
@@ -981,7 +972,7 @@ export default function Home() {
           <section className="filters" aria-label="Filter dashboard">
             <label>Periode
               <select value={period} onChange={(e) => setPeriod(e.target.value)}>
-                <option>Januari–Juli 2026</option><option>Tahun 2026</option><option>Musim Tanam II 2026</option>
+                <option>MT II 2026</option><option>MT I 2026</option><option>Tahun 2026</option>
               </select>
             </label>
             <label>Wilayah
@@ -1053,7 +1044,7 @@ export default function Home() {
                       <path className="area" d="M0 145 C65 115 110 112 165 84 S265 71 310 51 L310 160 L0 160 Z" />
                       <path className="actual-line" d="M0 145 C65 115 110 112 165 84 S265 71 310 51" />
                     </svg>
-                    <div className="chart-tip"><span>Juli 2026</span><strong>198.750 ton</strong><small>Target: 220.000 ton</small></div>
+                    <div className="chart-tip"><span>Juli 2026</span><strong>174.577 ton</strong><small>Target: 197.220 ton</small></div>
                   </div>
                   <div className="months">{["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"].map(m => <span key={m}>{m}</span>)}</div>
                 </div>

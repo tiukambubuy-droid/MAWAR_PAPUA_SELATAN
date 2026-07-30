@@ -1,0 +1,74 @@
+{
+  "schema_version": "2.0.0",
+  "commodities": [
+    {
+      "id": "PADI",
+      "name": "Padi",
+      "is_active": true
+    }
+  ],
+  "seasons": [
+    {
+      "season_id": "MT1-2026",
+      "name": "MT I 2026",
+      "display_name": "MT I 2026 (Selesai)",
+      "sequence": 1,
+      "year": 2026,
+      "status": "completed",
+      "commodity_id": "PADI",
+      "regency_id": "93.01",
+      "start_date": "2025-10-01",
+      "end_date": "2026-03-31",
+      "reporting_cutoff": "2026-03-31",
+      "data_type": "simulation",
+      "validation_status": "approved",
+      "validation_rate": 93
+    },
+    {
+      "season_id": "MT2-2026",
+      "name": "MT II 2026",
+      "display_name": "MT II 2026 (Berjalan)",
+      "sequence": 2,
+      "year": 2026,
+      "status": "in_progress",
+      "commodity_id": "PADI",
+      "regency_id": "93.01",
+      "start_date": "2026-04-01",
+      "end_date": "2026-09-30",
+      "reporting_cutoff": "2026-07-24",
+      "data_type": "simulation",
+      "validation_status": "approved",
+      "validation_rate": 91
+    }
+  ],
+  "milling_yield": {
+    "rate": 63.39,
+    "type": "standard_reference",
+    "source": "BPS - Survei Konversi Gabah ke Beras 2018",
+    "reference_region": "Papua",
+    "effective_from": "2018-01-01",
+    "is_verified": true
+  },
+  "canonical_totals": {
+    "MT1-2026": {
+      "mapped_land_ha": 48920,
+      "active_land_ha": 37800,
+      "planting_target_ha": 36500,
+      "planting_realization_ha": 35120,
+      "harvested_area_ha": 33470,
+      "gkg_production_ton": 183420,
+      "gkg_production_target_ton": 185000,
+      "loss_rate": 4.5
+    },
+    "MT2-2026": {
+      "mapped_land_ha": 48920,
+      "active_land_ha": 42680,
+      "planting_target_ha": 42680,
+      "planting_realization_ha": 38180,
+      "harvested_area_ha": 31854,
+      "gkg_production_ton": 174577,
+      "gkg_production_target_ton": 197220,
+      "loss_rate": 4.5
+    }
+  }
+}
