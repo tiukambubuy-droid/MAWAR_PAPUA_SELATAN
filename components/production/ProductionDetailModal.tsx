@@ -13,36 +13,36 @@ import type { Season } from "@/lib/data-foundation";
 const number = (value: number, decimals = 0) =>
   value.toLocaleString("id-ID", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 
-function recordSeed(row: ProductionRecord) {
-  return [...row.name].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+export function hasSupportedCause(record: ProductionRecord, causeType: string) {
+  const causes = (record as ProductionRecord & { causes?: Record<string, unknown> }).causes;
+  return Boolean(causes && Object.prototype.hasOwnProperty.call(causes, causeType) && causes[causeType]);
 }
 
-export function ProductionDetailModal({ row, district, village, season, onClose }: {
+export function ProductionDetailModal({ row, recordId, seasonId, regionId, context, district, village, season, onClose }: {
   row: ProductionRecord;
+  recordId: string;
+  seasonId: string;
+  regionId: string;
+  context: "production";
   district: string;
   village: string;
   season: Season | null;
   onClose: () => void;
 }) {
   const achievement = row.gkg / row.target * 100;
-  const seed = recordSeed(row);
   const condition = row.validation <= 83
-    ? { label: "Gagal Panen", tone: "danger", Icon: AlertTriangle, explanation: "Sebagian luasan mengalami kehilangan hasil dan memerlukan verifikasi lanjutan." }
+    ? { label: "Perlu Validasi", tone: "danger", Icon: AlertTriangle, explanation: "Tingkat validasi record memerlukan verifikasi lanjutan." }
     : achievement < 86
       ? { label: "Produksi Turun", tone: "down", Icon: TrendingDown, explanation: "Produksi berada di bawah musim sebelumnya dan target berjalan." }
       : achievement < 92
         ? { label: "Waspada", tone: "warning", Icon: AlertTriangle, explanation: "Capaian masih dapat ditingkatkan melalui penguatan pengendalian lapangan." }
         : { label: "Baik", tone: "good", Icon: CheckCircle2, explanation: "Produksi sesuai target dan produktivitas berada pada tingkat yang baik." };
-  const puso = condition.tone === "danger";
   const ConditionIcon = condition.Icon;
-  const pusoArea = puso ? Math.max(3, Math.round(row.harvested * (1.1 + seed % 12) / 100)) : 0;
-  const causes = condition.tone === "good"
-    ? ["Tidak ditemukan gangguan produksi yang signifikan.", "Produktivitas meningkat dan pengendalian OPT berjalan baik."]
-    : condition.tone === "danger"
-      ? ["Banjir pada petak rendah.", "Serangan hama dan penyakit tanaman.", "Penurunan luas panen efektif."]
-      : condition.tone === "down"
-        ? ["Curah hujan tinggi dan keterlambatan tanam.", "Penurunan luas panen.", "Produktivitas belum merata."]
-        : ["Pengendalian hama perlu diperkuat.", "Keterlambatan tanam pada sebagian areal.", "Validasi hasil timbang belum merata."];
+  const causes = [
+    `Capaian produksi tercatat ${number(achievement, 1)}% dari target.`,
+    `Tingkat validasi record sebesar ${row.validation}%.`,
+    `Produktivitas terukur ${number(row.yieldRate, 2)} ton/ha.`,
+  ];
   const previous = [0.84, 0.89, 0.93, 1].map(factor => Math.round(row.gkg * factor));
   const comparisonLabels = ["MT I 2025", "MT II 2025", "Musim sebelumnya", season?.display_name ?? "Musim aktif"];
   const maxComparison = Math.max(...previous);
@@ -60,6 +60,8 @@ export function ProductionDetailModal({ row, district, village, season, onClose 
       document.body.style.overflow = priorOverflow;
     };
   }, [onClose]);
+
+  if (row.id !== recordId || row.id !== regionId || season?.season_id !== seasonId || context !== "production") return null;
 
   const handlePrint = () => {
     document.body.classList.add("production-detail-printing");
@@ -129,9 +131,9 @@ export function ProductionDetailModal({ row, district, village, season, onClose 
               <div className="production-detail-card-title"><Eye size={17} /> Analisis Penyebab</div>
               <ul>{causes.map(cause => <li key={cause}><CheckCircle2 size={15} /> {cause}</li>)}</ul>
             </article>
-            <article className={`production-detail-card production-puso-card ${puso ? "has-puso" : "no-puso"}`}>
-              <div className="production-detail-card-title"><AlertTriangle size={17} /> Informasi Gagal Panen (Puso)</div>
-              {puso ? <><strong>Gagal Panen</strong><div className="production-puso-metrics"><span>Luas puso<b>{pusoArea} ha</b></span><span>Terhadap luas panen<b>{number(pusoArea / row.harvested * 100, 1)}%</b></span></div><p><b>Penyebab utama:</b> Banjir dan serangan hama</p><p><b>Status:</b> Sudah diverifikasi</p></> : <div className="production-puso-clear"><CheckCircle2 size={30} /><strong>Tidak terdapat gagal panen</strong><span>pada periode ini.</span></div>}
+            <article className="production-detail-card production-puso-card no-puso">
+              <div className="production-detail-card-title"><AlertTriangle size={17} /> Informasi Penyebab Khusus</div>
+              <div className="production-puso-clear"><CheckCircle2 size={30} /><strong>Tidak terdapat informasi penyebab khusus</strong><span>pada data prototipe ini.</span></div>
             </article>
             <article className="production-detail-card">
               <div className="production-detail-card-title"><FileCheck2 size={17} /> Informasi Validasi</div>
@@ -146,7 +148,7 @@ export function ProductionDetailModal({ row, district, village, season, onClose 
               <p><Gauge size={16} />Produktivitas {row.yieldRate >= 5.5 ? "di atas" : "mendekati"} rata-rata distrik.</p>
               <p><PackageCheck size={16} />Estimasi beras mencapai {number(row.rice)} ton.</p>
               <p><Target size={16} />Target {achievement >= 90 ? "diperkirakan tercapai apabila tren tetap stabil" : "memerlukan percepatan dukungan lapangan"}.</p>
-              <p><AlertTriangle size={16} />{condition.tone === "good" ? "Pertahankan pengendalian hama dan mutu pascapanen." : "Perlu peningkatan pengendalian hama pada area tertentu."}</p>
+              <p><AlertTriangle size={16} />{condition.tone === "good" ? "Capaian produksi berada pada kategori Baik." : `Capaian ${number(achievement, 1)}% masih memerlukan pemantauan sampai akhir musim.`}</p>
             </div>
           </section>
         </div>

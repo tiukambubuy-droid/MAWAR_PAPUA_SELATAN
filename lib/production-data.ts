@@ -5,6 +5,7 @@ import {
   calculateProductivity,
   districtAggregates,
   getChildrenByRegionId,
+  getRegionById,
   getRegionByName,
   getSeasonById,
   productionRecords,
@@ -79,6 +80,31 @@ export function recordsForScope(districtName: string, villageName: string, seaso
         aggregateRegion(village.id, seasonId),
       )]
     : [];
+}
+
+export function recordsForRegionIds(seasonId: string, districtId: string | null, villageId: string | null) {
+  if (villageId) {
+    const region = getRegionById(villageId);
+    return region ? [presentationRecord(
+      region.id,
+      region.name,
+      region.administrative_type === "kelurahan" ? "Kelurahan" : "Kampung",
+      aggregateRegion(region.id, seasonId),
+    )] : [];
+  }
+  if (districtId) {
+    return getChildrenByRegionId(districtId)
+      .filter((region) => region.monitoring_status === "active")
+      .map((region) => presentationRecord(
+        region.id,
+        region.name,
+        region.administrative_type === "kelurahan" ? "Kelurahan" : "Kampung",
+        aggregateRegion(region.id, seasonId),
+      ));
+  }
+  return districtAggregates(seasonId).map(({ region, aggregate }) =>
+    presentationRecord(region.id, region.name, "Distrik", aggregate),
+  );
 }
 
 export function aggregateProduction(records: ProductionRecord[]) {

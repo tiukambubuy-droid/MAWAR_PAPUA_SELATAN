@@ -76,6 +76,7 @@ export function ProductionTable({
             </tr>
           </thead>
           <tbody>
+            {!visible.length && <tr><td colSpan={8}>Tidak ada data sesuai filter.<small>Ubah pencarian atau filter untuk melihat data lainnya.</small></td></tr>}
             {visible.map((row) => {
               const percentage = (row.gkg / row.target) * 100;
               return (
@@ -114,7 +115,7 @@ export function ProductionTable({
           Menampilkan {filtered.length ? (page - 1) * 6 + 1 : 0}–
           {Math.min(page * 6, filtered.length)} dari {filtered.length} data
         </span>
-        <div>
+        {filtered.length > 0 && <div>
           <button disabled={page === 1} onClick={() => setPage((current) => current - 1)}>‹</button>
           {Array.from({ length: pages }, (_, index) => (
             <button
@@ -126,7 +127,7 @@ export function ProductionTable({
             </button>
           ))}
           <button disabled={page === pages} onClick={() => setPage((current) => current + 1)}>›</button>
-        </div>
+        </div>}
       </div>
     </article>
   );

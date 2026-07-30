@@ -1,12 +1,12 @@
-import type { RegionNode } from "@/types/planting-season";
+import type { Region } from "@/lib/data-foundation";
 
-export function RegionFilters({ districts, villages, district, village, onDistrict, onVillage }: {
-  districts: RegionNode[]; villages: RegionNode[]; district: string; village: string;
-  onDistrict: (value: string) => void; onVillage: (value: string) => void;
+export function RegionFilters({ districts, villages, districtId, villageId, onDistrict, onVillage }: {
+  districts: Region[]; villages: Region[]; districtId: string | null; villageId: string | null;
+  onDistrict: (value: string | null) => void; onVillage: (value: string | null) => void;
 }) {
   return <div className="season-filter-group region"><div className="season-filter-title">WILAYAH</div><div className="season-filter-pair three">
-    <label><span>Kabupaten</span><select value="Merauke" aria-label="Kabupaten" disabled><option>Merauke</option></select></label>
-    <label><span>Distrik</span><select aria-label="Distrik" value={district} onChange={e => onDistrict(e.target.value)}><option value="all">Semua Distrik</option>{districts.map(item => <option key={item.id}>{item.name}</option>)}</select></label>
-    <label><span>Kampung/Kelurahan</span><select aria-label="Kampung/Kelurahan" disabled={district === "all"} value={village} onChange={e => onVillage(e.target.value)}><option value="all">Semua Kampung/Kelurahan</option>{villages.map(item => <option key={item.id}>{item.name}</option>)}</select></label>
+    <label><span>Kabupaten</span><select value="93.01" aria-label="Kabupaten" disabled><option value="93.01">Merauke</option></select></label>
+    <label><span>Distrik</span><select aria-label="Distrik" value={districtId ?? ""} onChange={e => onDistrict(e.target.value || null)}><option value="">Semua Distrik</option>{districts.map(item => <option key={item.id} value={item.id}>{item.name}{item.monitoring_status !== "active" ? " — Belum dipantau" : ""}</option>)}</select></label>
+    <label><span>Kampung/Kelurahan</span><select aria-label="Kampung/Kelurahan" disabled={!districtId} value={villageId ?? ""} onChange={e => onVillage(e.target.value || null)}><option value="">Semua Kampung/Kelurahan</option>{villages.map(item => <option key={item.id} value={item.id}>{item.name}{item.monitoring_status !== "active" ? " — Belum dipantau" : ""}</option>)}</select></label>
   </div></div>;
 }

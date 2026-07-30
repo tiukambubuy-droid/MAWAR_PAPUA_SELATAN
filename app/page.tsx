@@ -6,32 +6,17 @@ import { createPortal } from "react-dom";
 import SeasonCommandCenter from "@/components/season/SeasonPage";
 import ProductionCommandCenter from "@/components/production/ProductionPage";
 import ExecutiveDashboard from "@/components/overview/ExecutiveDashboard";
-import { recordsForScope as sharedProductionRecords } from "@/lib/production-data";
+import { DashboardFilterProvider, useDashboardFilters } from "@/components/DashboardFilterProvider";
 import {
   aggregateRegion,
-  compactYieldNote,
   getActiveMonitoringRegionCounts,
   getChildrenByRegionId,
+  getRegionById,
   getRegionByName,
 } from "@/lib/data-foundation";
+import { phaseColors, reduceMapBreadcrumb, riskColors, selectPhaseMonitoring, selectRiskMonitoring } from "@/lib/map-monitoring";
 
 const activeRegionCounts = getActiveMonitoringRegionCounts();
-
-const districts = [
-  { name: "Merauke", x: 67, y: 70, value: "Data teragregasi", risk: "Aman" },
-  { name: "Semangga", x: 45, y: 48, value: "Data teragregasi", risk: "Waspada" },
-  { name: "Tanah Miring", x: 65, y: 39, value: "Data teragregasi", risk: "Waspada" },
-  { name: "Kurik", x: 77, y: 28, value: "Data teragregasi", risk: "Tinggi" },
-  { name: "Malind", x: 35, y: 67, value: "Data teragregasi", risk: "Aman" },
-];
-
-const metrics = [
-  { icon: "↗", label: "Luas Tanam", value: "38.180", unit: "ha", change: "+8,4%" },
-  { icon: "⌁", label: "Luas Panen", value: "31.854", unit: "ha", change: "+7,1%" },
-  { icon: "◉", label: "Produksi GKG", value: "174.577", unit: "ton", change: "+9,6%" },
-  { icon: "▥", label: "Produktivitas", value: "5,48", unit: "ton/ha", change: "+1,2%" },
-  { icon: "●", label: "Estimasi Beras", value: "110.664", unit: "ton", change: compactYieldNote },
-];
 
 const nav = [
   ["▦", "Ringkasan"],
@@ -60,42 +45,42 @@ function districtVillageCount(name: string) {
   return district ? getChildrenByRegionId(district.id).length : 0;
 }
 
-const plantingPhases = ["Persiapan", "Persemaian", "Vegetatif", "Generatif", "Pematangan", "Siap Panen"];
-const phaseColors: Record<string, string> = {
-  Persiapan: "#4b8fa8", Persemaian: "#b9dba8", Vegetatif: "#55a977",
-  Generatif: "#d9c954", Pematangan: "#df963c", "Siap Panen": "#ad7927",
-};
-const riskLevels = ["Rendah", "Waspada", "Sedang", "Tinggi/Kritis"];
-const riskColors: Record<string, string> = {
-  Rendah: "#57a878", Waspada: "#dfc849", Sedang: "#e79a39", "Tinggi/Kritis": "#b33d38",
-};
+const plantingPhases = Object.keys(phaseColors);
+const riskLevels = Object.keys(riskColors);
 
-function phaseProfile(name: string) {
-  const seed = seededNumber(name);
-  const phase = plantingPhases[seed % plantingPhases.length];
+function profileRegionId(name: string) {
+  return getRegionByName(name, "district")?.id ??
+    getRegionByName(name, "kampung")?.id ??
+    getRegionByName(name, "kelurahan")?.id ??
+    "93.01";
+}
+
+function phaseProfile(name: string, seasonId: string, snapshotId: string | null) {
+  const selected = selectPhaseMonitoring(seasonId, profileRegionId(name), snapshotId);
+  const progress = Math.round(selected.composition[selected.dominant] ?? 0);
   return {
-    phase,
-    progress: 28 + seed % 68,
-    age: 12 + seed % 88,
-    planted: 420 + seed % 1480,
-    ready: 180 + seed % 920,
-    start: `${3 + seed % 24} Juni 2026`,
-    harvest: `${5 + seed % 23} Agustus 2026`,
+    phase: selected.dominant,
+    progress,
+    age: null,
+    planted: Math.round(selected.total),
+    ready: Math.round(selected.total * ((selected.composition["Siap Panen"] ?? 0) / 100)),
+    start: "Mengikuti periode musim",
+    harvest: "Mengikuti data monitoring",
+    monitored: selected.monitored,
   };
 }
 
-function riskProfile(name: string) {
-  const seed = seededNumber(name);
-  const level = riskLevels[seed % riskLevels.length];
-  const threats = ["Banjir/genangan", "Kekeringan", "Hama wereng", "Penyakit blas", "Anomali cuaca"];
-  const recommendations = ["Pemantauan rutin", "Perbaiki drainase", "Siapkan pompa air", "Pengendalian OPT terpadu", "Verifikasi lapangan"];
+function riskProfile(name: string, seasonId: string, snapshotId: string | null) {
+  const selected = selectRiskMonitoring(seasonId, profileRegionId(name), snapshotId);
+  const score = Math.round(selected.composition[selected.dominant] ?? 0);
   return {
-    level,
-    threat: threats[(seed + 2) % threats.length],
-    affected: 90 + seed % 1120,
-    score: 22 + seed % 76,
-    villages: 1 + seed % Math.max(2, districtVillageCount(name)),
-    recommendation: recommendations[(seed + 1) % recommendations.length],
+    level: selected.dominant,
+    threat: "Tidak tersedia pada data prototipe",
+    affected: Math.round(selected.total),
+    score,
+    villages: selected.monitored ? districtVillageCount(name) : 0,
+    recommendation: selected.monitored ? "Lanjutkan pemantauan berdasarkan tingkat risiko terukur." : "Belum dipantau",
+    monitored: selected.monitored,
   };
 }
 
@@ -103,36 +88,36 @@ function numericValue(value: string) {
   return Number(value.replace(/[^\d]/g, "")) || 0;
 }
 
-function layerColor(layer: LandLayer, name: string) {
-  if (layer === "Fase Tanam") return phaseColors[phaseProfile(name).phase];
-  if (layer === "Tingkat Risiko") return riskColors[riskProfile(name).level];
+function layerColor(layer: LandLayer, name: string, seasonId: string, snapshotId: string | null) {
+  if (layer === "Fase Tanam") return phaseColors[phaseProfile(name, seasonId, snapshotId).phase];
+  if (layer === "Tingkat Risiko") return riskColors[riskProfile(name, seasonId, snapshotId).level];
   return "";
 }
 
-function makeDistrictSummary(name: string) {
-  const seed = seededNumber(name);
-  const known = productionRows.find(row => row.district.toLowerCase() === name.toLowerCase());
-  const base = known ?? {
-    district: name,
-    harvest: (950 + seed % 2400).toLocaleString("id-ID"),
-    gkg: (5200 + seed * 17).toLocaleString("id-ID"),
-    yield: (5.1 + (seed % 70) / 100).toFixed(2).replace(".", ","),
-    rice: (3300 + seed * 11).toLocaleString("id-ID"),
-    target: 72 + seed % 24,
-  };
+function makeDistrictSummary(name: string, seasonId = "MT2-2026") {
+  const region = getRegionByName(name, "district");
+  const aggregate = aggregateRegion(region?.id ?? "unknown", seasonId);
+  const target = aggregate.gkg_production_target_ton
+    ? aggregate.gkg_production_ton / aggregate.gkg_production_target_ton * 100
+    : 0;
   return {
-    ...base,
-    land: (1600 + seed % 3900).toLocaleString("id-ID"),
-    planted: (1200 + seed % 3100).toLocaleString("id-ID"),
+    district: name,
+    harvest: Math.round(aggregate.harvested_area_ha).toLocaleString("id-ID"),
+    gkg: Math.round(aggregate.gkg_production_ton).toLocaleString("id-ID"),
+    yield: (aggregate.harvested_area_ha ? aggregate.gkg_production_ton / aggregate.harvested_area_ha : 0).toLocaleString("id-ID", { maximumFractionDigits: 2 }),
+    rice: Math.round(aggregate.gkg_production_ton * 0.6339).toLocaleString("id-ID"),
+    target: Math.round(target),
+    land: Math.round(aggregate.mapped_land_ha).toLocaleString("id-ID"),
+    planted: Math.round(aggregate.planting_realization_ha).toLocaleString("id-ID"),
     villages: districtVillageCount(name),
-    condition: base.target >= 88 ? "Baik" : base.target >= 78 ? "Waspada" : "Perlu verifikasi",
-    updated: "25 Juli 2026 · 22.42 WIT",
+    condition: region?.monitoring_status !== "active" ? "Belum dipantau" : target >= 85 ? "Baik" : target >= 70 ? "Waspada" : "Perlu verifikasi",
+    updated: seasonId === "MT2-2026" ? "24 Juli 2026" : "31 Maret 2026",
   };
 }
 
-function makeDistrictRows(names: string[]): LandTableRow[] {
+function makeDistrictRows(names: string[], seasonId = "MT2-2026"): LandTableRow[] {
   return names.map(name => {
-    const summary = makeDistrictSummary(name);
+    const summary = makeDistrictSummary(name, seasonId);
     return {
       cells: [
         name,
@@ -149,11 +134,11 @@ function makeDistrictRows(names: string[]): LandTableRow[] {
   });
 }
 
-function makeVillageRows(district: string): LandTableRow[] {
+function makeVillageRows(district: string, seasonId = "MT2-2026"): LandTableRow[] {
   const districtRegion = getRegionByName(district, "district");
   const children = districtRegion ? getChildrenByRegionId(districtRegion.id) : [];
   return children.map((region, index) => {
-    const aggregate = aggregateRegion(region.id, "MT2-2026");
+    const aggregate = aggregateRegion(region.id, seasonId);
     const seed = seededNumber(region.id);
     const validation = Math.round(aggregate.validation_rate);
     const status = validation >= 86 ? "Baik" : validation >= 74 ? "Waspada" : "Verifikasi";
@@ -173,15 +158,6 @@ function makeVillageRows(district: string): LandTableRow[] {
   });
 }
 
-const sharedDistrictRows = sharedProductionRecords("Semua Distrik", "Semua Kampung");
-const productionRows = sharedDistrictRows.map(row => ({
-  district: row.name,
-  harvest: Math.round(row.harvested).toLocaleString("id-ID"),
-  gkg: Math.round(row.gkg).toLocaleString("id-ID"),
-  yield: row.yieldRate.toLocaleString("id-ID", { maximumFractionDigits: 2 }),
-  rice: Math.round(row.rice).toLocaleString("id-ID"),
-  target: Math.round(row.gkg / row.target * 100),
-}));
 function PageTitle({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) {
   return (
     <section className="page-heading subpage-heading">
@@ -218,9 +194,11 @@ function featureName(feature: GeoFeature, level: "province" | "district") {
 }
 
 function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; onContextChange: (level: MapLevel, selectedName: string, districtNames: string[]) => void }) {
-  const [level, setLevel] = useState<MapLevel>("province");
+  const { filters, setDistrict } = useDashboardFilters();
+  const globalDistrict = filters.districtId ? getRegionById(filters.districtId) : null;
+  const [level, setLevel] = useState<MapLevel>(filters.districtId ? "district" : "province");
   const [features, setFeatures] = useState<GeoFeature[]>([]);
-  const [selectedName, setSelectedName] = useState("");
+  const [selectedName, setSelectedName] = useState(globalDistrict?.name ?? "");
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [sourceMode, setSourceMode] = useState<"live" | "local">("live");
   const [loadNonce, setLoadNonce] = useState(0);
@@ -283,6 +261,7 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     const provinceQuery = new URLSearchParams({
       where: "wadmpr='Papua Selatan'",
       outFields: "namobj,wadmkk,wadmpr",
@@ -305,7 +284,7 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
       ? `${bigService}/13/query?${provinceQuery}`
       : `${bigDistrictService}/0/query?${districtQuery}`;
 
-    fetch(url)
+    fetch(url, { signal: controller.signal })
       .then(response => {
         if (!response.ok) throw new Error("BIG service unavailable");
         return response.json();
@@ -318,7 +297,8 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
         setSourceMode("live");
         setStatus("ready");
       })
-      .catch(async () => {
+      .catch(async (error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
         if (cancelled) return;
         if (level === "district") {
           try {
@@ -339,8 +319,19 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
         }
         if (!cancelled) setStatus("error");
       });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; controller.abort(); };
   }, [level, loadNonce]);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      if (globalDistrict) {
+        setLevel("district");
+        setSelectedName(globalDistrict.name);
+      } else {
+        setSelectedName("");
+      }
+    });
+  }, [globalDistrict]);
 
   const mapModel = useMemo(() => {
     const allPoints = features.flatMap(feature => polygonRings(feature).flat());
@@ -383,15 +374,15 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
     onContextChange(level, selectedName, districtNames);
   }, [level, mapModel, onContextChange, selectedName]);
 
-  const districtDummy = useMemo(() => makeDistrictSummary(selectedName), [selectedName]);
-  const selectedPhase = useMemo(() => phaseProfile(selectedName), [selectedName]);
-  const selectedRisk = useMemo(() => riskProfile(selectedName), [selectedName]);
+  const districtDummy = useMemo(() => makeDistrictSummary(selectedName, filters.seasonId), [filters.seasonId, selectedName]);
+  const selectedPhase = useMemo(() => phaseProfile(selectedName, filters.seasonId, filters.snapshotId), [filters.seasonId, filters.snapshotId, selectedName]);
+  const selectedRisk = useMemo(() => riskProfile(selectedName, filters.seasonId, filters.snapshotId), [filters.seasonId, filters.snapshotId, selectedName]);
 
   return (
     <div className="real-map-shell">
       <div className="map-breadcrumb">
-        <button onClick={() => { setStatus("loading"); setLevel("province"); setSelectedName(""); resetZoom(); }} className={level === "province" ? "current" : ""}>Papua Selatan</button>
-        {level === "district" && <><span>›</span><button className="current" onClick={() => { setSelectedName(""); resetZoom(); }}>Kabupaten Merauke</button>{selectedName && <><span>›</span><button className="current">{selectedName}</button></>}</>}
+        <button onClick={() => { const next = reduceMapBreadcrumb("province", filters); setDistrict(next.districtId); setStatus("loading"); setLevel("province"); setSelectedName(""); resetZoom(); }} className={level === "province" ? "current" : ""}>Papua Selatan</button>
+        {level === "district" && <><span>›</span><button className="current" onClick={() => { const next = reduceMapBreadcrumb("regency", filters); setDistrict(next.districtId); setSelectedName(""); resetZoom(); }}>Kabupaten Merauke</button>{selectedName && <><span>›</span><button className="current" onClick={() => { const next = reduceMapBreadcrumb("district", filters); setDistrict(next.districtId); }}>{selectedName}</button></>}</>}
       </div>
       <div className={`real-map-canvas ${focusedDistrict ? "district-detail-view" : ""}`}>
         {status === "loading" && <div className="map-state"><span className="map-loader" /><strong>Memuat batas administrasi BIG…</strong><small>Menyiapkan geometri wilayah resmi</small></div>}
@@ -414,7 +405,7 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
                   {...panProps}
                 >
                   <g className="map-zoom-layer" style={{ transform: mapTransform, transformOrigin: `${focusedDistrict.center[0]}px ${focusedDistrict.center[1]}px` }}>
-                    <path className="focused-district-shape" d={focusedDistrict.path} vectorEffect="non-scaling-stroke" style={layer !== "Luas Tanam" ? { fill: layerColor(layer, focusedDistrict.name) } : undefined} />
+                    <path className="focused-district-shape" d={focusedDistrict.path} vectorEffect="non-scaling-stroke" style={layer !== "Luas Tanam" ? { fill: layerColor(layer, focusedDistrict.name, filters.seasonId, filters.snapshotId) } : undefined} />
                     <text className="focused-district-label" x={focusedDistrict.center[0]} y={focusedDistrict.center[1]} textAnchor="middle">{focusedDistrict.name}</text>
                   </g>
                 </svg>
@@ -492,7 +483,7 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
                     onClick={() => {
                       if (suppressClickRef.current) { suppressClickRef.current = false; return; }
                       if (level === "province" && isMerauke) { setStatus("loading"); setLevel("district"); setSelectedName(""); resetZoom(); }
-                      if (level === "district") { setSelectedName(item.name); resetZoom(); }
+                      if (level === "district") { setSelectedName(item.name); setDistrict(getRegionByName(item.name, "district")?.id ?? null); resetZoom(); }
                     }}
                     tabIndex={active ? 0 : -1}
                     role={active ? "button" : undefined}
@@ -500,10 +491,10 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
                     onKeyDown={event => {
                       if (event.key !== "Enter" && event.key !== " ") return;
                       if (level === "province" && isMerauke) { setStatus("loading"); setLevel("district"); setSelectedName(""); resetZoom(); }
-                      if (level === "district") { setSelectedName(item.name); resetZoom(); }
+                      if (level === "district") { setSelectedName(item.name); setDistrict(getRegionByName(item.name, "district")?.id ?? null); resetZoom(); }
                     }}
                   >
-                    <path d={item.path} vectorEffect="non-scaling-stroke" style={active && layer !== "Luas Tanam" ? { fill: layerColor(layer, item.name) } : undefined} />
+                    <path d={item.path} vectorEffect="non-scaling-stroke" style={active && layer !== "Luas Tanam" ? { fill: layerColor(layer, item.name, filters.seasonId, filters.snapshotId) } : undefined} />
                     <text x={item.center[0]} y={item.center[1]} textAnchor="middle">
                       {item.name}
                     </text>
@@ -532,6 +523,7 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
 }
 
 function LandPage() {
+  const { filters } = useDashboardFilters();
   const [layer, setLayer] = useState<LandLayer>("Luas Tanam");
   const [search, setSearch] = useState("");
   const [tablePage, setTablePage] = useState(1);
@@ -565,7 +557,7 @@ function LandPage() {
     const areaNames = mapContext.level === "province"
       ? ["Merauke"]
       : mapContext.selectedName
-        ? makeVillageRows(mapContext.selectedName).map(row => row.cells[0])
+        ? makeVillageRows(mapContext.selectedName, filters.seasonId).map(row => row.cells[0])
         : mapContext.districtNames;
     const areaLabel = mapContext.level === "province" ? "Kabupaten" : mapContext.selectedName ? "Kampung/Kelurahan" : "Distrik";
     const countLabel = mapContext.level === "province" ? "Jumlah Distrik" : mapContext.selectedName ? "Cakupan" : "Jumlah Kampung/Kelurahan";
@@ -577,7 +569,7 @@ function LandPage() {
       title: `REKAP FASE TANAM — ${scopeTitle}`,
       headers: [areaLabel, countLabel, "Luas Dalam Fase", "Fase Dominan", "Progres Fase", "Estimasi Panen", "Validasi"],
       rows: areaNames.map(name => {
-        const phase = phaseProfile(name);
+        const phase = phaseProfile(name, filters.seasonId, filters.snapshotId);
         const seed = seededNumber(name);
         return {
           cells: [
@@ -598,7 +590,7 @@ function LandPage() {
       title: `REKAP TINGKAT RISIKO — ${scopeTitle}`,
       headers: [areaLabel, countLabel, "Ancaman Dominan", "Tingkat Risiko", "Luas Terdampak", "Rekomendasi", "Skor"],
       rows: areaNames.map(name => {
-        const risk = riskProfile(name);
+        const risk = riskProfile(name, filters.seasonId, filters.snapshotId);
         return {
           cells: [
             name,
@@ -622,14 +614,14 @@ function LandPage() {
     if (!mapContext.selectedName) return {
       title: "REKAP DISTRIK KABUPATEN MERAUKE",
       headers: ["Distrik", "Jumlah Kampung/Kelurahan", "Luas Tanam", "Luas Panen", "Produksi GKG", "Kondisi", "Validasi"],
-      rows: makeDistrictRows(mapContext.districtNames),
+      rows: makeDistrictRows(mapContext.districtNames, filters.seasonId),
     };
     return {
       title: `DAFTAR KAMPUNG TERPANTAU — DISTRIK ${mapContext.selectedName.toUpperCase()}`,
       headers: ["Kampung/Kelurahan", "Luas Lahan", "Luas Tanam", "Fase Tanam", "Produksi GKG", "Status", "Validasi"],
-      rows: makeVillageRows(mapContext.selectedName),
+      rows: makeVillageRows(mapContext.selectedName, filters.seasonId),
     };
-  }, [layer, mapContext]);
+  }, [filters.seasonId, filters.snapshotId, layer, mapContext]);
   const insightModel = useMemo(() => {
     if (mapContext.level === "province") return {
       scope: "Kabupaten Merauke",
@@ -670,10 +662,10 @@ function LandPage() {
   const analyticalInsight = useMemo(() => {
     const scope = mapContext.selectedName ? `Distrik ${mapContext.selectedName}` : "Kabupaten Merauke";
     const key = mapContext.selectedName || "Merauke";
-    const phase = phaseProfile(key);
-    const risk = riskProfile(key);
+    const phase = phaseProfile(key, filters.seasonId, filters.snapshotId);
+    const risk = riskProfile(key, filters.seasonId, filters.snapshotId);
     return { scope, phase, risk };
-  }, [mapContext]);
+  }, [filters.seasonId, filters.snapshotId, mapContext]);
   const entityLabel = mapContext.level === "province"
     ? "Kabupaten"
     : mapContext.selectedName
@@ -747,39 +739,33 @@ function LandPage() {
     const name = detailRow.cells[0];
     const status = detailRow.cells[detailRow.statusIndex];
     if (layer === "Fase Tanam") {
-      const profile = phaseProfile(name);
+      const profile = phaseProfile(name, filters.seasonId, filters.snapshotId);
       return {
         eyebrow: "DETAIL FASE TANAM",
         name,
         status,
         color: phaseColors[status],
-        description: `${name} berada pada fase ${status} berdasarkan umur tanaman sekitar ${profile.age} hari, pengamatan perkembangan tanaman, dan progres fase sebesar ${profile.progress}%.`,
-        reason: `Petugas mencatat pertumbuhan tanaman sesuai indikator fase ${status.toLowerCase()}, dengan luas dalam fase ${detailRow.cells[2]} dan tidak ditemukan penyimpangan mayor pada pemantauan terakhir.`,
-        recommendation: status === "Siap Panen" ? "Siapkan jadwal panen, alat, tenaga kerja, dan pengangkutan hasil." : "Lanjutkan pemantauan pertumbuhan dan sesuaikan kebutuhan air serta pemupukan.",
+        description: `${name} berada pada fase ${status} dengan progres komposisi sebesar ${profile.progress}% dari data monitoring musim terpilih.`,
+        reason: `Status berasal dari fase dengan luas terbesar pada record musim dan wilayah aktif, dengan luas dalam fase ${detailRow.cells[2]}.`,
+        recommendation: "Lanjutkan validasi record dan pemantauan perkembangan fase.",
       };
     }
     if (layer === "Tingkat Risiko") {
-      const profile = riskProfile(name);
-      const reasonByRisk: Record<string, string> = {
-        Rendah: "Kondisi air, tanaman, dan cuaca masih stabil serta belum ditemukan gangguan yang berdampak besar.",
-        Waspada: "Terdapat indikator awal gangguan yang perlu dipantau agar tidak berkembang menjadi risiko yang lebih tinggi.",
-        Sedang: "Beberapa indikator ancaman telah muncul dan berpotensi memengaruhi sebagian lahan apabila tidak segera dikendalikan.",
-        "Tinggi/Kritis": "Ancaman telah memengaruhi area produktif dan membutuhkan verifikasi serta tindakan lapangan dengan prioritas tinggi.",
-      };
+      const profile = riskProfile(name, filters.seasonId, filters.snapshotId);
       return {
         eyebrow: "DETAIL TINGKAT RISIKO",
         name,
         status,
         color: riskColors[status],
-        description: `${name} memiliki tingkat risiko ${status} dengan ancaman dominan ${profile.threat.toLowerCase()} dan skor pemantauan ${profile.score}/100.`,
-        reason: reasonByRisk[status],
+        description: `${name} memiliki tingkat risiko ${status} dengan komposisi dominan ${profile.score}% pada data musim terpilih.`,
+        reason: "Kategori berasal dari agregasi field risiko pada record monitoring yang terverifikasi.",
         recommendation: profile.recommendation,
       };
     }
     const validation = numericValue(detailRow.cells[detailRow.validationIndex]);
     const reasonByStatus: Record<string, string> = {
-      Baik: `Status Baik diberikan karena validasi mencapai ${validation}%, kondisi pertanaman stabil, serta produktivitas dan ketersediaan air berada dalam batas normal.`,
-      Waspada: `Status Waspada diberikan karena validasi baru mencapai ${validation}% dan ditemukan indikator ringan seperti perubahan kelembapan, keterlambatan fase, atau gangguan tanaman.`,
+      Baik: `Status Baik diberikan karena validasi mencapai ${validation}% dan metrik monitoring berada dalam kategori baik.`,
+      Waspada: `Status Waspada diberikan karena validasi mencapai ${validation}% dan kategori monitoring memerlukan perhatian.`,
       Verifikasi: `Status Verifikasi diberikan karena tingkat validasi masih ${validation}% sehingga data lapangan perlu dicocokkan kembali dengan laporan penyuluh dan pemetaan.`,
       Aktif: `Data dinyatakan aktif karena pembaruan dan validasi wilayah telah mencapai ${validation}%.`,
     };
@@ -792,7 +778,7 @@ function LandPage() {
       reason: reasonByStatus[status] ?? `Status ${status} ditetapkan berdasarkan hasil pemantauan dan validasi data lapangan.`,
       recommendation: status === "Baik" || status === "Aktif" ? "Pertahankan pola pemeliharaan dan pembaruan data berkala." : status === "Waspada" ? "Lakukan pemantauan lebih sering dan tindak lanjuti indikator gangguan." : "Lakukan verifikasi lapangan dan perbarui data pendukung.",
     };
-  }, [detailRow, layer]);
+  }, [detailRow, filters.seasonId, filters.snapshotId, layer]);
   useEffect(() => {
     if (!detailRow) return;
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setDetailRow(null); };
@@ -866,7 +852,7 @@ function LandPage() {
           <label><span>{layer === "Tingkat Risiko" ? "Skor minimum" : "Validasi minimum"}</span><select value={minimumFilter} onChange={event => { setMinimumFilter(event.target.value); setTablePage(1); }}><option>Semua</option><option value="70">≥ 70%</option><option value="80">≥ 80%</option><option value="90">≥ 90%</option></select></label>
           <button className="reset-filter" disabled={!filterActive} onClick={() => { setSearch(""); setCategoryFilter("Semua"); setMinimumFilter("Semua"); setTablePage(1); }}>↺ Reset filter</button>
         </div>
-        <div className="table-scroll"><table><thead><tr>{tableModel.headers.map(header => <th key={header}>{header}</th>)}<th>Detail</th></tr></thead><tbody>{visibleRows.map((row, rowIndex) => <tr key={`${row.cells[0]}-${rowIndex}`}>{row.cells.map((cell,i) => {
+        <div className="table-scroll"><table><thead><tr>{tableModel.headers.map(header => <th key={header}>{header}</th>)}<th>Detail</th></tr></thead><tbody>{!visibleRows.length && <tr><td colSpan={tableModel.headers.length + 1}>Tidak ada data sesuai filter.<small>Ubah pencarian atau filter untuk melihat data lainnya.</small></td></tr>}{visibleRows.map((row, rowIndex) => <tr key={`${row.cells[0]}-${rowIndex}`}>{row.cells.map((cell,i) => {
           const indicatorColor = layer === "Fase Tanam" ? phaseColors[cell] : layer === "Tingkat Risiko" ? riskColors[cell] : undefined;
           return <td key={i}>{i === row.statusIndex ? <span className={`status ${indicatorColor ? "layer-status" : cell !== "Baik" && cell !== "Aktif" ? "warn" : ""}`} style={indicatorColor ? { color: indicatorColor, borderColor: `${indicatorColor}55`, background: `${indicatorColor}18` } : undefined}>{cell}</span> : i === row.validationIndex ? <span className="validation"><i style={{width:cell}} />{cell}</span> : cell}</td>;
         })}<td><button className="detail-button" onClick={() => setDetailRow(row)}>Lihat selengkapnya</button></td></tr>)}</tbody></table></div>
@@ -905,12 +891,8 @@ function ProductionPage() {
   return <ProductionCommandCenter />;
 }
 
-export default function Home() {
+function HomeContent() {
   const [activeNav, setActiveNav] = useState("Ringkasan");
-  const [period, setPeriod] = useState("MT II 2026");
-  const [district, setDistrict] = useState("Kabupaten Merauke");
-  const [selected, setSelected] = useState(districts[0]);
-  const [showAlerts, setShowAlerts] = useState(false);
 
   return (
     <main className="app-shell">
@@ -959,121 +941,6 @@ export default function Home() {
 
         <div className="content">
           {activeNav === "Ringkasan" && <ExecutiveDashboard onNavigate={setActiveNav} />}
-          {false && activeNav === "Ringkasan" && <>
-          <section className="page-heading">
-            <div>
-              <p className="eyebrow">RINGKASAN EKSEKUTIF · PKN I</p>
-              <h1>Dashboard Pemantauan Padi dan Beras</h1>
-              <p>Kabupaten Merauke sebagai wilayah percontohan lumbung pangan Papua Selatan</p>
-            </div>
-            <button className="download" onClick={() => window.print()}>⇩ Unduh Laporan</button>
-          </section>
-
-          <section className="filters" aria-label="Filter dashboard">
-            <label>Periode
-              <select value={period} onChange={(e) => setPeriod(e.target.value)}>
-                <option>MT II 2026</option><option>MT I 2026</option><option>Tahun 2026</option>
-              </select>
-            </label>
-            <label>Wilayah
-              <select value={district} onChange={(e) => setDistrict(e.target.value)}>
-                <option>Kabupaten Merauke</option><option>Distrik Merauke</option><option>Distrik Semangga</option>
-              </select>
-            </label>
-            <label>Komoditas
-              <select><option>Padi & Beras</option><option>Padi</option><option>Beras</option></select>
-            </label>
-            <div className="season"><span>●</span><div><small>STATUS MUSIM TANAM</small><strong>MT II · April–September</strong></div></div>
-          </section>
-
-          <section className="metric-grid">
-            {metrics.map((metric) => (
-              <article className="metric" key={metric.label}>
-                <div className="metric-icon">{metric.icon}</div>
-                <div>
-                  <span>{metric.label}</span>
-                  <strong>{metric.value} <small>{metric.unit}</small></strong>
-                  <em>↑ {metric.change} <i>vs 2025</i></em>
-                </div>
-              </article>
-            ))}
-          </section>
-
-          <section className="main-grid">
-            <article className="card map-card">
-              <div className="card-title">
-                <div><span className="live-dot" /> PETA SEBARAN TANAM & PANEN</div>
-                <button>Lihat detail ↗</button>
-              </div>
-              <div className="map-stage">
-                <div className="map-copy"><small>PAPUA SELATAN</small><strong>KABUPATEN<br />MERAUKE</strong></div>
-                <div className="map-shape">
-                  <span className="field f1" /><span className="field f2" /><span className="field f3" />
-                  <span className="field f4" /><span className="field f5" /><span className="field f6" />
-                  {districts.map((item) => (
-                    <button
-                      key={item.name}
-                      className={`map-pin ${selected.name === item.name ? "selected" : ""} ${item.risk === "Tinggi" ? "danger" : ""}`}
-                      style={{ left: `${item.x}%`, top: `${item.y}%` }}
-                      onClick={() => setSelected(item)}
-                      aria-label={`Pilih ${item.name}`}
-                    >
-                      <i />
-                      <span>{item.name}</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="legend"><strong>Legenda</strong><span><i className="green" /> Tanam</span><span><i className="cyan" /> Panen</span><span><i className="orange" /> Risiko</span></div>
-                <div className="map-detail">
-                  <span>WILAYAH TERPILIH</span><strong>{selected.name}</strong>
-                  <p>Produksi GKG <b>{selected.value}</b></p>
-                  <p>Status <b className={selected.risk === "Tinggi" ? "red" : ""}>{selected.risk}</b></p>
-                </div>
-              </div>
-            </article>
-
-            <div className="analytics-stack">
-              <article className="card chart-card">
-                <div className="card-title"><div>TARGET VS REALISASI PRODUKSI GKG 2026</div><span>Ton</span></div>
-                <div className="chart">
-                  <div className="chart-labels"><span>220K</span><span>165K</span><span>110K</span><span>55K</span><span>0</span></div>
-                  <div className="plot">
-                    <div className="grid-lines" />
-                    <svg viewBox="0 0 500 160" preserveAspectRatio="none" aria-label="Grafik target dan realisasi">
-                      <path className="target-line" d="M0 145 C90 117 160 101 220 78 S390 48 500 8" />
-                      <path className="area" d="M0 145 C65 115 110 112 165 84 S265 71 310 51 L310 160 L0 160 Z" />
-                      <path className="actual-line" d="M0 145 C65 115 110 112 165 84 S265 71 310 51" />
-                    </svg>
-                    <div className="chart-tip"><span>Juli 2026</span><strong>174.577 ton</strong><small>Target: 197.220 ton</small></div>
-                  </div>
-                  <div className="months">{["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"].map(m => <span key={m}>{m}</span>)}</div>
-                </div>
-              </article>
-
-              <article className="card alert-card">
-                <div className="card-title">
-                  <div>△ PERINGATAN RISIKO</div>
-                  <button onClick={() => setShowAlerts(!showAlerts)}>{showAlerts ? "Tutup" : "Lihat semua"} →</button>
-                </div>
-                <div className="alerts">
-                  <button onClick={() => setSelected(districts[3])}><b className="flood">≋</b><span><strong>Banjir — Kurik</strong><small>Potensi banjir di wilayah persawahan</small></span><em>Tinggi</em></button>
-                  <button onClick={() => setSelected(districts[1])}><b className="drought">☀</b><span><strong>Kekeringan — Semangga</strong><small>Curah hujan rendah terpantau</small></span><em>Sedang</em></button>
-                  {showAlerts && <button><b className="pest">⌁</b><span><strong>Hama Wereng — Tanah Miring</strong><small>Peningkatan populasi perlu verifikasi</small></span><em>Sedang</em></button>}
-                </div>
-              </article>
-            </div>
-          </section>
-
-          <section className="summary-strip">
-            <div><span>▣</span><small>PERKIRAAN PANEN PUNCAK</small><strong>Jul–Agu 2026</strong></div>
-            <div><span>▤</span><small>STOK BERAS SAAT INI</small><strong>21.480 <i>ton</i></strong><em>● Aman</em></div>
-            <div><span>▥</span><small>KEBUTUHAN BERAS 2026</small><strong>118.500 <i>ton</i></strong></div>
-            <div><span>♢</span><small>STATUS KETAHANAN</small><strong className="safe">Aman</strong><em>Surplus diproyeksikan</em></div>
-            <div><span>♙</span><small>POKOK SASARAN PETANI</small><strong>28.950 <i>KK</i></strong></div>
-            <div><span>♜</span><small>ALSINTAN TERSEDIA</small><strong>312 <i>unit</i></strong><em>Siap operasional</em></div>
-          </section>
-          </>}
-
           {activeNav === "Peta Lahan" && <LandPage />}
           {activeNav === "Musim Tanam" && <SeasonPage />}
           {activeNav === "Produksi" && <ProductionPage />}
@@ -1083,4 +950,8 @@ export default function Home() {
       </section>
     </main>
   );
+}
+
+export default function Home() {
+  return <DashboardFilterProvider><HomeContent /></DashboardFilterProvider>;
 }

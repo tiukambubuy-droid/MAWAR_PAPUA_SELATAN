@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  AlertTriangle, CalendarDays, CheckCircle2, ChevronRight, CloudRain,
-  Download, Droplets, Gauge, LandPlot, MapPin, PackageCheck, Sprout,
+  AlertTriangle, CalendarDays, CheckCircle2, ChevronRight,
+  Download, Gauge, LandPlot, MapPin, PackageCheck, Sprout,
   Target, Tractor, TrendingUp, Wheat, X,
 } from "lucide-react";
 import { aggregateProduction, recordsForScope } from "@/lib/production-data";
@@ -14,8 +14,11 @@ import {
   getRegionByName,
   getSeasonById,
   millingYield,
+  regions,
   yieldNote,
 } from "@/lib/data-foundation";
+import { useDashboardFilters } from "@/components/DashboardFilterProvider";
+import { compareActualAtEquivalentStage, compareProjectedFinalToCompletedSeason, getChartDataPoints } from "@/lib/chart-data";
 
 type PageName = "Peta Lahan" | "Musim Tanam" | "Produksi";
 
@@ -43,17 +46,16 @@ function districtName(feature: GeoFeature) {
 }
 
 export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: PageName) => void }) {
-  const [seasonId, setSeasonId] = useState("MT2-2026");
+  const { filters, setSeason, setDistrict, setCommodity } = useDashboardFilters();
+  const { seasonId, districtId } = filters;
   const currentSeason = getSeasonById(seasonId);
-  const [region, setRegion] = useState("Kabupaten Merauke");
-  const [commodity, setCommodity] = useState("Padi & Beras");
-  const [selected, setSelected] = useState("Semangga");
   const [productionDetailOpen, setProductionDetailOpen] = useState(false);
 
   const productionRows = useMemo(() => recordsForScope("Semua Distrik", "Semua Kampung", seasonId), [seasonId]);
   const regencyProduction = useMemo(() => aggregateProduction(productionRows), [productionRows]);
-  const selectedDistrictName = region.replace(/^Distrik /, "");
-  const selectedDistrict = region === "Kabupaten Merauke" ? null : getRegionByName(selectedDistrictName, "district");
+  const selectedDistrict = districtId ? regions.find(item => item.id === districtId) ?? null : null;
+  const selectedDistrictName = selectedDistrict?.name ?? "";
+  const districtOptions = regions.filter(item => item.administrative_type === "district" && item.parent_id === "93.01");
   const scope = aggregateRegion(selectedDistrict?.id ?? "93.01", seasonId);
   const production = selectedDistrict
     ? aggregateProduction(recordsForScope(selectedDistrict.name, "Semua Kampung/Kelurahan", seasonId))
@@ -64,7 +66,16 @@ export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: 
   const rice = Math.round(production.rice);
   const target = Math.round(production.target);
   const achievement = target ? gkg / target * 100 : 0;
-  const selectedRow = productionRows.find(row => row.name === selected);
+  const chartScale = regencyProduction.gkg ? production.gkg / regencyProduction.gkg : 0;
+  const chartData = getChartDataPoints(seasonId, "gkg_production_ton", regencyProduction.target, chartScale);
+  const activePoint = chartData.find(point => point.id === filters.snapshotId) ??
+    chartData.find(point => point.isCutoff) ??
+    chartData.filter(point => point.actual !== null).at(-1);
+  const plantingStage4 = compareActualAtEquivalentStage("MT1-2026", "MT2-2026", 4, "planting_realization_ha");
+  const productionStage4 = compareActualAtEquivalentStage("MT1-2026", "MT2-2026", 4, "gkg_production_ton");
+  const finalComparison = compareProjectedFinalToCompletedSeason();
+  const percentChange = (left: number, right: number) => left ? (right - left) / left * 100 : 0;
+  const selectedRow = productionRows.find(row => row.id === districtId);
 
   const kpis = [
     { Icon: Sprout, label: "Luas Tanam", value: format(planted), unit: "ha", change: "8,4%" },
@@ -85,9 +96,9 @@ export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: 
       </section>
 
       <section className="card executive-filters" aria-label="Filter global dashboard">
-        <label><span>PERIODE</span><div><CalendarDays size={16}/><select value={seasonId} onChange={e => setSeasonId(e.target.value)}><option value="MT2-2026">MT II 2026 (Berjalan)</option><option value="MT1-2026">MT I 2026 (Selesai)</option></select></div></label>
-        <label><span>WILAYAH</span><div><MapPin size={16}/><select value={region} onChange={e => setRegion(e.target.value)}><option>Kabupaten Merauke</option>{productionRows.map(row => <option key={row.id}>Distrik {row.name}</option>)}</select></div></label>
-        <label><span>KOMODITAS</span><div><Wheat size={16}/><select value={commodity} onChange={e => setCommodity(e.target.value)}><option>Padi & Beras</option><option>Padi</option><option>Beras</option></select></div></label>
+        <label><span>PERIODE</span><div><CalendarDays size={16}/><select value={seasonId} onChange={e => setSeason(e.target.value)}><option value="MT2-2026">MT II 2026 (Berjalan)</option><option value="MT1-2026">MT I 2026 (Selesai)</option></select></div></label>
+        <label><span>WILAYAH</span><div><MapPin size={16}/><select value={districtId ?? ""} onChange={e => setDistrict(e.target.value || null)}><option value="">Kabupaten Merauke</option>{districtOptions.map(row => <option key={row.id} value={row.id}>Distrik {row.name}{row.monitoring_status !== "active" ? " — Belum dipantau" : ""}</option>)}</select></div></label>
+        <label><span>KOMODITAS</span><div><Wheat size={16}/><select value={filters.commodityId} onChange={e => setCommodity(e.target.value)}><option value="PADI">Padi</option></select></div></label>
         <div className="executive-season"><span>STATUS MUSIM TANAM</span><strong><i/> {currentSeason?.display_name}</strong></div>
       </section>
 
@@ -99,43 +110,45 @@ export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: 
         <article className="card executive-map">
           <ExecutiveTitle title="PETA SEBARAN LAHAN" action={() => onNavigate("Peta Lahan")}/>
           <div className="executive-map-stage">
-            <ExecutiveBigMap selected={selected} onSelect={setSelected}/>
-            <div className="map-selection"><MapPin size={17}/><span>Distrik {selected}</span><strong>{selectedRow ? `${format(selectedRow.gkg)} ton GKG · wilayah terpantau` : "Klik distrik untuk melihat data"}</strong></div>
+            <ExecutiveBigMap selected={selectedDistrictName} onSelect={name => setDistrict(getRegionByName(name, "district")?.id ?? null)}/>
+            <div className="map-selection"><MapPin size={17}/><span>{selectedDistrict ? `Distrik ${selectedDistrict.name}` : "Kabupaten Merauke"}</span><strong>{selectedDistrict?.monitoring_status === "not_monitored" ? "Belum dipantau" : selectedRow ? `${format(selectedRow.gkg)} ton GKG · wilayah terpantau` : "Klik distrik untuk melihat data"}</strong></div>
           </div>
         </article>
 
         <article className="card executive-chart">
           <ExecutiveTitle title={`TARGET VS REALISASI PRODUKSI GKG — ${currentSeason?.name ?? ""}`} action={() => setProductionDetailOpen(true)}/>
           <div className="chart-key"><span className="target">Target</span><span className="actual">Realisasi</span><span className="projection">Proyeksi</span></div>
-          <svg viewBox="0 0 720 270" preserveAspectRatio="none" aria-label="Grafik target dan realisasi produksi">
-            {[45,90,135,180,225].map(y => <line key={y} x1="48" y1={y} x2="700" y2={y} className="grid"/>)}
-            <path className="area" d="M48 225 L105 198 L162 172 L219 145 L276 123 L333 104 L390 91 L447 77 L447 240 L48 240 Z"/>
-            <path className="target-line" d="M48 225 L105 197 L162 168 L219 137 L276 112 L333 90 L390 70 L447 55 L504 43 L561 33 L618 25 L690 18"/>
-            <path className="actual-line" d="M48 225 L105 198 L162 172 L219 145 L276 123 L333 104 L390 91 L447 77"/>
-            <path className="projection-line" d="M447 77 L504 63 L561 51 L618 42 L690 34"/>
-            {[48,105,162,219,276,333,390,447].map((x,i)=><circle key={x} cx={x} cy={[225,198,172,145,123,104,91,77][i]} r="4"/>)}
-            <line x1="447" y1="28" x2="447" y2="240" className="today"/>
-            {["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"].map((month,index)=><text key={month} x={48+index*58} y="260">{month}</text>)}
-          </svg>
-          <div className="chart-tooltip"><span>Juli 2026</span><strong>Realisasi: {format(gkg)} ton</strong><small>Target: {format(target)} ton</small><b>Capaian: {format(achievement,1)}%</b></div>
+          <ExecutiveProductionChart seasonId={seasonId} production={production.gkg} target={production.target} />
+          {activePoint && <div className="chart-tooltip"><span>{activePoint.label}</span><strong>Realisasi: {format(activePoint.actual ?? gkg)} ton</strong><small>Target: {format(activePoint.target ?? target)} ton</small><b>{activePoint.isCutoff ? "Cut-off" : currentSeason?.status === "completed" ? "Musim selesai" : "Periode aktif"}</b></div>}
         </article>
       </section>
 
       <section className="executive-secondary">
-        <article className="card current-season"><ExecutiveTitle title="MUSIM TANAM SAAT INI"/><div><strong>{currentSeason?.display_name} <b>Aktif</b></strong><span>Fase Dominan</span><em>Generatif</em><i><b style={{width:"68%"}}/></i><span>Estimasi Panen</span><strong>Agustus–September 2026</strong><span>Status Musim</span><b className="normal">Normal</b></div></article>
+        <article className="card current-season"><ExecutiveTitle title="MUSIM TANAM TERPILIH"/><div><strong>{currentSeason?.display_name} <b>{currentSeason?.status === "completed" ? "Selesai" : "Berjalan"}</b></strong><span>Cakupan</span><em>{selectedDistrict ? `Distrik ${selectedDistrict.name}` : "Kabupaten Merauke"}</em><i><b style={{width:`${Math.min(100, achievement)}%`}}/></i><span>Cut-off</span><strong>{currentSeason?.reporting_cutoff}</strong><span>Status Data</span><b className="normal">Terpantau</b></div></article>
         <article className="card production-recap"><ExecutiveTitle title="RINGKASAN PRODUKSI"/><div><p>Produksi GKG <b>{format(gkg)} ton</b></p><p>Estimasi Beras <b>{format(rice)} ton</b></p><p>Produktivitas <b>{format(production.yieldRate,2)} ton/ha</b></p><p>Target Produksi <b>{format(target)} ton</b></p><strong>Capaian Target <b>{format(achievement,1)}%</b></strong></div></article>
         <article className="card top-regions"><ExecutiveTitle title="WILAYAH KONTRIBUTOR TERBESAR" action={() => onNavigate("Produksi")}/><div>{productionRows.slice().sort((a,b)=>b.gkg-a.gkg).slice(0,5).map(row=><p key={row.id}><span>{row.name}</span><i><b style={{width:`${row.gkg/Math.max(...productionRows.map(item=>item.gkg))*100}%`}}/></i><strong>{format(row.gkg)}</strong><em>{format(row.gkg/production.gkg*100,1)}%</em></p>)}</div></article>
         <article className="card system-summary"><ExecutiveTitle title="RINGKASAN SISTEM"/><div>{[
           `Luas tanam mencapai ${format(planted)} ha, naik 8,4% dibanding tahun 2025.`,
-          "68% lahan terpantau berada pada fase dominan Generatif.",
+          `Fase dominan mengikuti data monitoring ${currentSeason?.name ?? "musim terpilih"}.`,
           `Produksi GKG mencapai ${format(gkg)} ton atau ${format(achievement,1)}% dari target.`,
           `Estimasi beras mencapai ${format(rice)} ton. ${yieldNote}`,
-          "Tidak terdapat gagal panen signifikan hingga saat ini.",
-          "Distrik dengan kontribusi terbesar perlu dipertahankan.",
+          `Validasi data mencapai ${format(scope.validation_rate)}%.`,
+          seasonId === "MT2-2026" && plantingStage4
+            ? `Realisasi tanam MT II pada tahap ke-4 meningkat ${format(percentChange(plantingStage4.left, plantingStage4.right), 1)}% dibandingkan tahap ke-4 MT I.`
+            : "MT I merupakan musim selesai dan menjadi baseline pembanding untuk MT II.",
+          seasonId === "MT2-2026" && productionStage4
+            ? `Produksi GKG MT II pada tahap ke-4 meningkat ${format(percentChange(productionStage4.left, productionStage4.right), 1)}% dibandingkan tahap ke-4 MT I.`
+            : "Capaian MT I menggunakan realisasi akhir musim.",
+          seasonId === "MT2-2026"
+            ? "Perbandingan tahap setara: Januari MT I dan Juli MT II."
+            : "Perbandingan tahap setara ditampilkan ketika MT II dipilih.",
+          seasonId === "MT2-2026" && finalComparison
+            ? `Proyeksi akhir MT II ${format(finalComparison.projection)} ton dibandingkan realisasi akhir MT I ${format(finalComparison.actual)} ton.`
+            : seasonId === "MT2-2026" ? "Proyeksi akhir belum tersedia." : "MT I merupakan realisasi musim selesai.",
         ].map(text=><p key={text}><CheckCircle2 size={13}/>{text}</p>)}<button onClick={()=>onNavigate("Produksi")}>Lihat Semua Insight <ChevronRight size={15}/></button></div></article>
       </section>
 
-      <section className="card executive-alerts"><ExecutiveTitle title="ALERT & INFORMASI PENTING"/><div><AlertItem Icon={CalendarDays} title="Tidak ada gagal panen signifikan" text="Hingga Juli 2026"/><AlertItem Icon={CloudRain} title="Curah hujan tinggi di 2 distrik" text="Semangga, Tanah Miring" warn/><AlertItem Icon={Droplets} title="Kebutuhan air tercukupi" text="Irigasi & air hujan mencukupi" blue/><AlertItem Icon={TrendingUp} title="Rendemen standar Papua" text={`${format(millingYield.rate, 2)}% · SKGB BPS 2018`}/><AlertItem Icon={Tractor} title={`Validasi data ${format(scope.validation_rate)}%`} text="Sumber: Dinas Pertanian & BPS" warn/></div></section>
+      <section className="card executive-alerts"><ExecutiveTitle title="ALERT & INFORMASI PENTING"/><div><AlertItem Icon={CalendarDays} title={currentSeason?.display_name ?? "Musim terpilih"} text={`Cut-off ${currentSeason?.reporting_cutoff ?? "-"}`}/><AlertItem Icon={Target} title={`Capaian produksi ${format(achievement, 1)}%`} text="Berdasarkan target dan realisasi terpilih" warn={achievement < 95}/><AlertItem Icon={TrendingUp} title="Rendemen standar Papua" text={`${format(millingYield.rate, 2)}% · SKGB BPS 2018`}/><AlertItem Icon={Tractor} title={`Validasi data ${format(scope.validation_rate)}%`} text="Sumber: Dinas Pertanian & BPS" warn/></div></section>
       {productionDetailOpen && <ExecutiveProductionModal
         production={gkg}
         target={target}
@@ -143,6 +156,9 @@ export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: 
         harvested={harvested}
         yieldRate={production.yieldRate}
         achievement={achievement}
+        seasonName={currentSeason?.display_name ?? ""}
+        cutoff={currentSeason?.reporting_cutoff ?? ""}
+        scopeName={selectedDistrict ? `Distrik ${selectedDistrict.name}` : "Kabupaten Merauke"}
         onClose={() => setProductionDetailOpen(false)}
         onOpenProduction={() => { setProductionDetailOpen(false); onNavigate("Produksi"); }}
       />}
@@ -152,6 +168,27 @@ export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: 
 
 function ExecutiveTitle({ title, action }: { title: string; action?: () => void }) {
   return <div className="executive-title"><strong>{title}</strong>{action && <button onClick={action}>Lihat Detail <ChevronRight size={14}/></button>}</div>;
+}
+
+function ExecutiveProductionChart({ seasonId, production, target }: { seasonId: string; production: number; target: number }) {
+  const regency = aggregateRegion("93.01", seasonId);
+  const scale = regency.gkg_production_ton ? production / regency.gkg_production_ton : 0;
+  const data = getChartDataPoints(seasonId, "gkg_production_ton", regency.gkg_production_target_ton, scale);
+  const values = data.flatMap(point => [point.target, point.actual, point.projection].filter((value): value is number => value !== null));
+  const max = Math.max(...values, target, 1) * 1.08;
+  const x = (index: number) => 48 + index * (642 / Math.max(1, data.length - 1));
+  const y = (value: number) => 240 - value / max * 210;
+  const points = (field: "target" | "actual" | "projection") => data.filter(point => point[field] !== null).map(point => `${x(point.stageIndex - 1)},${y(point[field]!)}`).join(" ");
+  const cutoff = data.find(point => point.isCutoff);
+  return <svg viewBox="0 0 720 270" preserveAspectRatio="none" aria-label="Grafik target dan realisasi produksi">
+    {[45,90,135,180,225].map(value => <line key={value} x1="48" y1={value} x2="700" y2={value} className="grid"/>)}
+    <polyline className="target-line" points={points("target")} />
+    <polyline className="actual-line" points={points("actual")} />
+    {data.some(point => point.projection !== null) && <polyline className="projection-line" points={points("projection")} />}
+    {data.filter(point => point.actual !== null).map(point => <circle key={point.period} cx={x(point.stageIndex - 1)} cy={y(point.actual!)} r="4"><title>{point.label}: {format(point.actual!)} ton</title></circle>)}
+    {cutoff && <line x1={x(cutoff.stageIndex - 1)} y1="28" x2={x(cutoff.stageIndex - 1)} y2="240" className="today"/>}
+    {data.map(point => <text key={point.period} x={x(point.stageIndex - 1)} y="260" textAnchor="middle">{point.label.split(" ")[0]}</text>)}
+  </svg>;
 }
 
 function AlertItem({ Icon, title, text, warn, blue }: { Icon: typeof Target; title: string; text: string; warn?: boolean; blue?: boolean }) {
@@ -164,6 +201,7 @@ function ExecutiveBigMap({ selected, onSelect }: { selected: string; onSelect: (
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     const query = new URLSearchParams({
       where: "wadmkk='Merauke'",
       outFields: "namobj,wadmkc,wadmkk,wadmpr",
@@ -173,7 +211,7 @@ function ExecutiveBigMap({ selected, onSelect }: { selected: string; onSelect: (
       maxAllowableOffset: "0.001",
       f: "geojson",
     });
-    fetch(`${bigDistrictService}/0/query?${query}`)
+    fetch(`${bigDistrictService}/0/query?${query}`, { signal: controller.signal })
       .then(response => {
         if (!response.ok) throw new Error("BIG unavailable");
         return response.json();
@@ -181,7 +219,8 @@ function ExecutiveBigMap({ selected, onSelect }: { selected: string; onSelect: (
       .then(data => {
         if (!cancelled && Array.isArray(data.features) && data.features.length) setFeatures(data.features);
       })
-      .catch(async () => {
+      .catch(async (error) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
         try {
           const response = await fetch("/data/merauke-districts.geojson");
           const data = await response.json();
@@ -193,7 +232,7 @@ function ExecutiveBigMap({ selected, onSelect }: { selected: string; onSelect: (
           if (!cancelled) setFeatures([]);
         }
       });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; controller.abort(); };
   }, []);
 
   const model = useMemo(() => {
@@ -234,9 +273,10 @@ function ExecutiveBigMap({ selected, onSelect }: { selected: string; onSelect: (
 }
 
 function ExecutiveProductionModal({
-  production, target, rice, harvested, yieldRate, achievement, onClose, onOpenProduction,
+  production, target, rice, harvested, yieldRate, achievement, seasonName, cutoff, scopeName, onClose, onOpenProduction,
 }: {
   production: number; target: number; rice: number; harvested: number; yieldRate: number; achievement: number;
+  seasonName: string; cutoff: string; scopeName: string;
   onClose: () => void; onOpenProduction: () => void;
 }) {
   useEffect(() => {
@@ -248,7 +288,7 @@ function ExecutiveProductionModal({
   return createPortal(<div className="executive-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="executive-production-modal" role="dialog" aria-modal="true" aria-labelledby="executive-production-title">
       <header>
-        <div><span>DETAIL PRODUKSI KABUPATEN</span><h2 id="executive-production-title">Target vs Realisasi Produksi GKG</h2><p>MT II 2026 · Cut-off 24 Juli 2026 · Kabupaten Merauke</p></div>
+        <div><span>DETAIL PRODUKSI WILAYAH</span><h2 id="executive-production-title">Target vs Realisasi Produksi GKG</h2><p>{seasonName} · Cut-off {cutoff} · {scopeName}</p></div>
         <button onClick={onClose} aria-label="Tutup modal"><X size={20}/></button>
       </header>
       <div className="executive-modal-body">
@@ -263,7 +303,7 @@ function ExecutiveProductionModal({
         <article className="executive-modal-analysis">
           <h3>Perkembangan Realisasi</h3>
           <div className="executive-progress"><i><b style={{ width: `${Math.min(100, achievement)}%` }}/></i><span>{format(achievement, 1)}%</span></div>
-          <p>Realisasi produksi telah mencapai {format(production)} ton GKG. Dengan produktivitas rata-rata {format(yieldRate, 2)} ton/ha, capaian berada dalam kategori terpantau dan masih memerlukan pengawalan hingga akhir MT II 2026.</p>
+          <p>Realisasi produksi telah mencapai {format(production)} ton GKG. Dengan produktivitas rata-rata {format(yieldRate, 2)} ton/ha, capaian berada dalam kategori terpantau untuk {seasonName}.</p>
         </article>
         <article className="executive-modal-insight">
           <h3>Insight Pimpinan</h3>
