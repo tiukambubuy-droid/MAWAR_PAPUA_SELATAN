@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./ui-motion.css";
 
 export const metadata: Metadata = {
   title: "Starter Project",

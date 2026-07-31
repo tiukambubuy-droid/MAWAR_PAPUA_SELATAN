@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
   Activity, AlertTriangle, BarChart3, CalendarDays, CheckCircle2,
@@ -9,6 +8,7 @@ import {
 } from "lucide-react";
 import type { ProductionRecord } from "@/types/production";
 import type { Season } from "@/lib/data-foundation";
+import { useAccessibleModal } from "@/components/ui/useAccessibleModal";
 
 const number = (value: number, decimals = 0) =>
   value.toLocaleString("id-ID", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
@@ -50,16 +50,7 @@ export function ProductionDetailModal({ row, recordId, seasonId, regionId, conte
   const selectedVillage = row.level === "Kampung" || row.level === "Kelurahan" ? row.name : village === "Semua Kampung" ? row.name : village;
   const selectedDistrict = row.level === "Distrik" ? row.name : district;
 
-  useEffect(() => {
-    const handleKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    document.addEventListener("keydown", handleKey);
-    const priorOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", handleKey);
-      document.body.style.overflow = priorOverflow;
-    };
-  }, [onClose]);
+  useAccessibleModal(onClose);
 
   if (row.id !== recordId || row.id !== regionId || season?.season_id !== seasonId || context !== "production") return null;
 
@@ -155,7 +146,7 @@ export function ProductionDetailModal({ row, recordId, seasonId, regionId, conte
 
         <footer className="production-detail-footer">
           <span>Data demonstrasi · diperbarui 24 Juli 2026</span>
-          <div><button onClick={onClose}><X size={16} /> Tutup</button><button onClick={handlePrint}><Printer size={16} /> Cetak</button><button className="primary" onClick={handlePrint}><Download size={16} /> Export PDF</button></div>
+          <div><button aria-label="Tutup detail produksi" onClick={onClose}><X size={16} /> Tutup</button><button aria-label="Cetak detail produksi" onClick={handlePrint}><Printer size={16} /> Cetak</button><button className="primary" aria-label="Export detail produksi ke PDF" onClick={handlePrint}><Download size={16} /> Export PDF</button></div>
         </footer>
       </section>
     </div>,

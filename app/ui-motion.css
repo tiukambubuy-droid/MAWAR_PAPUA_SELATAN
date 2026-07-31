@@ -1,0 +1,265 @@
+:root {
+  --motion-fast: 160ms;
+  --motion-normal: 240ms;
+  --motion-slow: 620ms;
+  --motion-ease: cubic-bezier(.22,.8,.24,1);
+  --space-card: clamp(16px,1.35vw,22px);
+  --focus-ring: 0 0 0 3px rgba(10,168,118,.24);
+}
+
+html, body { max-width:100%; overflow-x:hidden; }
+body { font-size:14px; line-height:1.5; }
+button, select, input { min-width:0; }
+button:focus-visible, select:focus-visible, input:focus-visible, [role="button"]:focus-visible {
+  outline:2px solid #0a8f66; outline-offset:2px; box-shadow:var(--focus-ring);
+}
+.workspace,.content,.card,.card>*,section,article,div { min-width:0; }
+.content { width:100%; padding:clamp(16px,1.7vw,28px); }
+.card { overflow:hidden; }
+
+/* Loading and dimension-preserving skeleton */
+.dashboard-loading {
+  min-height:100dvh; padding:clamp(24px,5vw,72px); color:#123d31;
+  background:linear-gradient(145deg,#fbfdfb,#edf6f1); animation:loadingFade var(--motion-normal) var(--motion-ease) both;
+}
+.loading-brand { max-width:1500px; margin:0 auto 24px; display:flex; align-items:center; gap:16px; }
+.loading-mark { width:52px; height:52px; border-radius:15px; display:grid; place-items:center; color:#b8871d; background:#f7ebc9; font-size:28px; }
+.loading-brand h1 { margin:0; font-size:clamp(24px,3vw,34px); line-height:1.15; }
+.loading-brand p { margin:7px 0 0; color:#60766c; font-size:clamp(13px,1.4vw,16px); }
+.dashboard-skeleton { max-width:1500px; margin:auto; display:grid; gap:14px; }
+.skeleton-card,.skeleton-line {
+  position:relative; overflow:hidden; border:1px solid #deebe4; border-radius:14px; background:#e9f1ed;
+}
+.skeleton-card:after,.skeleton-line:after {
+  content:""; position:absolute; inset:0; transform:translateX(-100%);
+  background:linear-gradient(90deg,transparent,#ffffffaa,transparent); animation:skeletonSweep 1.2s ease-in-out infinite;
+}
+.skeleton-title { width:min(460px,80%); height:34px; }
+.skeleton-filter { height:82px; }
+.skeleton-kpis { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; }
+.skeleton-kpis .skeleton-card { height:116px; }
+.skeleton-primary { display:grid; grid-template-columns:.95fr 1.05fr; gap:12px; }
+.skeleton-primary .skeleton-card { height:360px; }
+.skeleton-secondary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.skeleton-secondary .skeleton-card { height:220px; }
+
+/* Shared motion */
+.page-enter { animation:contentEnter var(--motion-normal) var(--motion-ease) both; }
+.page-enter>section,.page-enter>article {
+  animation:sectionEnter var(--motion-normal) var(--motion-ease) both;
+}
+.page-enter>section:nth-child(2){animation-delay:35ms}
+.page-enter>section:nth-child(3){animation-delay:70ms}
+.page-enter>section:nth-child(4){animation-delay:105ms}
+.page-enter>section:nth-child(n+5){animation-delay:140ms}
+.card,button,select,input,.geo-layer path { transition:color var(--motion-fast) var(--motion-ease),background var(--motion-fast) var(--motion-ease),border-color var(--motion-fast) var(--motion-ease),box-shadow var(--motion-fast) var(--motion-ease),transform var(--motion-fast) var(--motion-ease),opacity var(--motion-fast) var(--motion-ease),fill var(--motion-normal) var(--motion-ease); }
+.executive-chart svg polyline,.season-line-card svg polyline,.production-trend svg polyline {
+  stroke-dashoffset:0; animation:lineDraw var(--motion-slow) var(--motion-ease) both;
+}
+.executive-chart svg .target-line,.season-line-card svg .target-line,.production-trend svg .target-line { animation-delay:0ms; }
+.executive-chart svg .actual-line,.season-line-card svg .actual-line,.production-trend svg .actual-line { animation-delay:90ms; }
+.executive-chart svg .projection-line,.season-line-card svg .projection-line,.production-trend svg .projection-line { animation-delay:180ms; }
+.executive-chart svg .today,.season-line-card svg .active-line,.production-trend svg .today-line { animation:cutoffReveal 520ms var(--motion-ease) 300ms both; }
+
+/* Global readable typography */
+.page-heading h1,.executive-heading h1,.season-heading h1,.production-heading h1 { font-size:clamp(26px,2.1vw,32px); line-height:1.15; }
+.page-heading p,.executive-heading p,.season-heading p,.production-heading p { font-size:clamp(13px,1vw,15px); line-height:1.45; }
+.executive-title,.production-card-title,.season-section-title,.card-title { min-height:50px; height:auto; padding:11px var(--space-card); gap:12px; }
+.executive-title strong,.production-card-title,.season-section-title,.card-title { font-size:clamp(14px,1.05vw,17px); line-height:1.35; }
+.executive-title button,.card-title button,.detail-button { flex:none; font-size:13px; }
+
+/* Ringkasan */
+.executive-filters { grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; padding:var(--space-card); }
+.executive-filters label>span,.executive-season>span { font-size:12px; }
+.executive-filters label>div { min-height:46px; height:auto; }
+.executive-filters select,.executive-season strong { font-size:13px; }
+.executive-kpis { gap:14px; }
+.executive-kpis article { min-height:118px; padding:var(--space-card); }
+.executive-kpis span { font-size:13px; line-height:1.35; }
+.executive-kpis strong { font-size:clamp(24px,1.8vw,30px); line-height:1.15; white-space:normal; }
+.executive-kpis strong small,.executive-kpis em { font-size:12px; }
+.executive-primary { gap:14px; }
+.executive-map-stage { height:clamp(330px,29vw,430px); }
+.executive-map-stage svg { width:86%; height:88%; right:2%; }
+.executive-map-stage svg text { paint-order:stroke; stroke:#083f32; stroke-width:2px; font-size:11px; }
+.executive-map-source { left:14px; bottom:12px; max-width:calc(100% - 28px); font-size:12px; }
+.map-selection { max-width:min(310px,calc(100% - 28px)); padding:11px 14px; }
+.map-selection span { font-size:13px; }.map-selection strong { font-size:12px; line-height:1.35; }
+.executive-chart svg { height:clamp(300px,28vw,410px); overflow:visible; }
+.executive-chart svg text { font-size:12px; }
+.chart-key { flex-wrap:wrap; gap:18px; padding:13px var(--space-card) 0; font-size:12px; }
+.chart-tooltip { top:105px; left:auto; right:clamp(12px,6%,60px); width:min(180px,42%); padding:12px 14px; font-size:12px; line-height:1.4; }
+.executive-secondary { grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }
+.executive-secondary>.card { min-height:0; }
+.current-season>div:last-child,.production-recap>div:last-child,.top-regions>div:last-child,.system-summary>div:last-child { padding:var(--space-card); }
+.current-season strong,.production-recap p b { font-size:14px; }
+.current-season span,.production-recap p,.top-regions p,.system-summary p { font-size:12px; line-height:1.45; }
+.top-regions p { grid-template-columns:minmax(72px,.9fr) 1fr 60px 44px; }
+.system-summary button { min-height:40px; font-size:12px; }
+.executive-alerts>div:last-child { grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; padding:var(--space-card); }
+.executive-alerts article { min-height:82px; padding:14px; align-items:flex-start; }
+.executive-alerts article strong { font-size:13px; line-height:1.35; }
+.executive-alerts article span { font-size:12px; line-height:1.4; }
+
+/* Peta */
+.sub-toolbar { padding:12px var(--space-card); flex-wrap:wrap; }
+.segmented { flex-wrap:wrap; }
+.segmented button,.search-box input { min-height:42px; font-size:13px; }
+.real-map-canvas { min-height:500px; height:min(64vh,650px); }
+.geo-layer text { font-size:12px; paint-order:stroke; stroke:#fff; stroke-width:2.5px; }
+.geo-layer g:not(.selected) path { opacity:.78; }
+.geo-layer g.selected path { opacity:1; filter:saturate(1.15); }
+.map-breadcrumb { min-height:48px; height:auto; flex-wrap:wrap; padding:10px var(--space-card); }
+.map-breadcrumb button,.real-map-legend,.official-source small { font-size:12px; }
+.map-zoom-controls button { min-width:40px; min-height:40px; font-size:15px; }
+.real-map-legend { gap:12px; padding:13px var(--space-card); flex-wrap:wrap; }
+.district-focus-layout { grid-template-columns:minmax(0,1.35fr) minmax(320px,.65fr); }
+.district-data-card { padding:var(--space-card); overflow:auto; }
+.district-data-grid span,.district-data-summary span,.district-updated { font-size:12px; }
+.district-data-grid strong,.district-data-summary strong { font-size:15px; }
+.data-table-card th,.data-table-card td { font-size:13px; padding:12px 14px; }
+.table-filterbar select,.reset-filter,.table-filterbar input { min-height:42px; font-size:13px; }
+
+/* Musim Tanam */
+.season-command-bar { grid-template-columns:minmax(260px,.9fr) minmax(370px,1.2fr) minmax(125px,.45fr) minmax(125px,.45fr) minmax(145px,.5fr); gap:14px; padding:var(--space-card); }
+.season-filter-group>b,.season-filter-pair label,.season-context small { font-size:12px; }
+.season-filter-pair select,.manage-season,.season-context strong { font-size:13px; }
+.season-context,.manage-season { min-height:58px; height:auto; }
+.month-tabs button { min-height:68px; padding:10px; font-size:13px; }
+.month-tabs button span,.month-tabs button small { font-size:12px; }
+.season-kpi-grid { gap:14px; }
+.season-kpi-grid article { min-height:110px; padding:var(--space-card); }
+.season-kpi-grid span,.season-kpi-grid small { font-size:12px; }
+.season-kpi-grid strong { font-size:clamp(22px,1.7vw,28px); line-height:1.2; }
+.season-line-card svg { width:100%; min-height:300px; overflow:visible; }
+.season-line-card svg text { font-size:12px; }
+.phase-composition-layout { padding:var(--space-card); gap:18px; }
+.phase-table-head,.phase-list>div,.phase-insight,.season-insights p { font-size:12px; line-height:1.45; }
+.season-table-tools { padding:12px var(--space-card); }
+.season-table-tools input,.season-table-tools select { min-height:42px; font-size:13px; }
+.season-table-card table { width:100%; min-width:0; table-layout:fixed; }
+.season-table-card th,.season-table-card td { padding:12px 9px; font-size:13px; overflow-wrap:anywhere; }
+.season-table-card small { font-size:12px; }
+
+/* Produksi */
+.production-filters { grid-template-columns:minmax(260px,.85fr) minmax(390px,1.25fr) minmax(260px,.8fr); gap:14px; padding:var(--space-card); }
+.production-filter-group>b,.production-filter-group label,.production-active small,.production-filter-actions small { font-size:12px; }
+.production-filter-group select,.production-filter-actions>button,.production-active strong,.production-download { font-size:13px; }
+.production-filter-group select { min-height:44px; height:auto; text-overflow:ellipsis; }
+.production-kpis { gap:14px; }
+.production-kpis article { min-height:112px; padding:var(--space-card); }
+.production-kpis small,.production-kpis p { font-size:12px; line-height:1.35; }
+.production-kpis strong { font-size:clamp(22px,1.7vw,29px); white-space:normal; }
+.production-visual-grid { grid-template-columns:minmax(0,1.2fr) repeat(2,minmax(0,.9fr)); gap:14px; }
+.production-chart-legend,.production-trend p,.production-region>p,.region-bars span,.region-bars b,.composition-labels span,.composition-labels strong,.composition-meta small,.composition-meta span { font-size:12px; line-height:1.4; }
+.production-trend svg { height:300px; overflow:visible; }
+.production-trend svg text { font-size:12px; }
+.production-bottom { grid-template-columns:minmax(0,1fr); gap:14px; }
+.production-table-card table { width:100%; min-width:0; table-layout:fixed; }
+.production-table-card th,.production-table-card td { padding:12px 8px; font-size:13px; overflow-wrap:anywhere; }
+.production-table-card td:first-child { min-width:0; }
+.production-table-card td:first-child small,.production-table-footer>span { font-size:12px; }
+.production-table-card td:last-child button { width:auto; min-width:74px; padding:0 10px; }
+.production-table-card .table-scroll { overflow-x:hidden; }
+.production-insight-list p,.production-forecast span,.production-forecast small,.production-insight>em { font-size:12px; line-height:1.45; }
+
+/* Modal standard */
+.detail-modal-backdrop,.production-modal-backdrop,.production-detail-backdrop,.executive-modal-backdrop,.season-modal-backdrop {
+  position:fixed!important; inset:0!important; width:100vw!important; height:100dvh!important;
+  display:grid!important; place-items:center!important; padding:clamp(10px,2vw,24px)!important;
+  background:rgba(3,31,23,.6)!important; backdrop-filter:blur(4px); z-index:1200;
+  animation:overlayIn var(--motion-normal) var(--motion-ease) both;
+}
+.detail-modal,.production-modal,.production-detail-modal,.executive-production-modal,.season-modal,.manage-season-modal {
+  width:min(1080px,100%)!important; max-height:90dvh!important; margin:auto!important;
+  animation:modalIn var(--motion-normal) var(--motion-ease) both;
+}
+.production-detail-scroll,.executive-modal-body,.production-modal-body,.detail-modal-body,.season-modal-body { overflow-y:auto; overscroll-behavior:contain; }
+.production-detail-card-title,.production-detail-card li,.production-detail-card p,.production-detail-card dt,.production-detail-card dd { font-size:12px; line-height:1.45; }
+.production-detail-kpis span,.production-detail-kpis strong small { font-size:12px; }
+.detail-modal>header span,.detail-modal>header small,.detail-status-strip>span,.detail-status-strip strong,
+.detail-metrics span,.detail-modal-body article span,.detail-modal>footer small,.detail-modal>footer button,
+.manage-season-modal header span,.manage-season-modal header small,.manage-form label,
+.manage-season-modal footer small,.manage-season-modal footer button {
+  font-size:12px; line-height:1.45; overflow-wrap:anywhere;
+}
+.production-detail-identity>small,.production-detail-identity>div span,.production-condition-badge,
+.production-detail-kpis span,.production-detail-kpis strong small,.production-period-bars span,
+.production-period-bars b,.production-change small,.production-condition-meter span,
+.production-puso-clear span,.production-puso-metrics span,.production-puso-card>p,
+.production-detail-card dt,.production-detail-card dd,.production-detail-footer>span,
+.production-detail-footer button {
+  font-size:12px; line-height:1.4; overflow-wrap:anywhere;
+}
+.executive-production-modal header span,.executive-production-modal header p,
+.executive-modal-kpis span,.executive-modal-kpis small,.executive-production-modal footer>span,
+.executive-production-modal footer button {
+  font-size:12px; line-height:1.4; overflow-wrap:anywhere;
+}
+
+@media (max-width:1250px) {
+  .executive-kpis { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .executive-secondary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .season-command-bar,.production-filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .production-filter-actions,.manage-season { grid-column:1/-1; }
+  .production-kpis { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .production-visual-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .production-composition { grid-column:1/-1; }
+}
+@media (max-width:900px) {
+  .sidebar { width:76px; padding-inline:8px; }
+  .workspace { margin-left:76px; }
+  .brand-mark strong,.nav-item span:last-child,.side-status { display:none; }
+  .nav-item { grid-template-columns:1fr; padding:0; text-align:center; }
+  .topbar { padding-inline:16px; }
+  .trust>div:nth-child(-n+3),.trust>i { display:none; }
+  .executive-filters,.executive-primary,.executive-secondary,.executive-alerts>div:last-child { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .executive-kpis,.production-kpis,.season-kpi-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .district-focus-layout,.production-visual-grid { grid-template-columns:1fr; }
+  .production-composition { grid-column:auto; }
+  .season-command-bar,.production-filters { grid-template-columns:1fr; }
+  .season-filter-group,.season-filter-group.region,.production-filter-group { grid-column:1; border-right:0; padding-right:0; }
+  .phase-composition-layout { grid-template-columns:1fr; }
+  .skeleton-kpis,.skeleton-secondary { grid-template-columns:repeat(2,1fr); }
+  .skeleton-primary { grid-template-columns:1fr; }
+}
+@media (max-width:620px) {
+  .app-shell { flex-direction:column; }
+  .sidebar { position:sticky; top:0; width:100%; height:58px; padding:5px 8px; flex-direction:row; align-items:center; overflow-x:auto; }
+  .brand-mark { flex:none; width:48px; height:48px; margin:0; border:0; }
+  .brand-mark .grain { font-size:25px; }
+  .sidebar nav { flex-direction:row; gap:4px; }
+  .nav-item { width:48px; min-height:46px; }
+  .workspace { margin-left:0; width:100%; }
+  .topbar { position:sticky; top:58px; height:62px; }
+  .identity strong { font-size:12px; }
+  .trust { display:none; }
+  .content { padding:14px 10px; }
+  .executive-filters,.executive-kpis,.executive-primary,.executive-secondary,.executive-alerts>div:last-child,.production-kpis,.season-kpi-grid { grid-template-columns:1fr; }
+  .executive-map-stage { height:390px; }
+  .executive-map-stage svg { width:100%; opacity:.9; }
+  .map-selection { left:10px; right:10px; bottom:54px; max-width:none; }
+  .executive-map-source { bottom:10px; }
+  .chart-tooltip { position:relative; inset:auto; width:auto; margin:0 12px 14px; }
+  .real-map-canvas { min-height:400px; height:56vh; }
+  .district-data-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .production-filter-group>div,.production-filter-group.region>div,.season-filter-pair,.season-filter-pair.three { grid-template-columns:1fr; }
+  .production-table-card .table-scroll,.season-table-card .table-scroll,.data-table-card .table-scroll { overflow-x:auto; }
+  .production-table-card table,.season-table-card table,.data-table-card table { min-width:850px; table-layout:auto; }
+  .production-detail-kpis { grid-template-columns:repeat(2,1fr); }
+  .production-detail-grid-main,.production-detail-grid-secondary,.executive-modal-kpis { grid-template-columns:1fr; }
+  .skeleton-kpis,.skeleton-secondary { grid-template-columns:1fr; }
+}
+
+@keyframes loadingFade { from{opacity:0} to{opacity:1} }
+@keyframes skeletonSweep { to{transform:translateX(100%)} }
+@keyframes contentEnter { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+@keyframes sectionEnter { from{opacity:0;transform:translateY(7px)} to{opacity:1;transform:none} }
+@keyframes lineDraw { from{stroke-dasharray:1000;stroke-dashoffset:1000} to{stroke-dasharray:1000;stroke-dashoffset:0} }
+@keyframes cutoffReveal { from{opacity:0;stroke-width:4} 70%{opacity:1;stroke-width:4} to{opacity:1} }
+@keyframes overlayIn { from{opacity:0} to{opacity:1} }
+@keyframes modalIn { from{opacity:0;transform:scale(.96) translateY(6px)} to{opacity:1;transform:none} }
+
+@media (prefers-reduced-motion:reduce) {
+  *,*::before,*::after { animation-duration:.01ms!important; animation-delay:0ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; scroll-behavior:auto!important; }
+}

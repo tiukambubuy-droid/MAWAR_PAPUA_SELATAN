@@ -12,6 +12,7 @@ import {
 } from "@/lib/dashboard-filters";
 import type { DashboardFilterState } from "@/lib/dashboard-filters";
 import { getDefaultSeasonSnapshot } from "@/lib/data-foundation";
+import { DashboardLoading } from "@/components/ui/DashboardLoading";
 
 type DashboardFilterContextValue = {
   filters: DashboardFilterState;
@@ -76,7 +77,7 @@ export function DashboardFilterProvider({ children }: { children: React.ReactNod
     const initial = resolveInitialDashboardFilters(params, restored);
     queueMicrotask(() => {
       commitFilters(initial, "replace");
-      setHydrated(true);
+      window.setTimeout(() => setHydrated(true), 300);
     });
     const handlePopState = () => {
       const next = resolveInitialDashboardFilters(new URLSearchParams(window.location.search), null);
@@ -109,7 +110,7 @@ export function DashboardFilterProvider({ children }: { children: React.ReactNod
     restoreSessionFilters,
   }), [filters, hydrated, applyUrlFilters, restoreSessionFilters, userUpdate, commitFilters]);
 
-  if (!hydrated) return <div className="app-loading" role="status">Memuat dashboard…</div>;
+  if (!hydrated) return <DashboardLoading />;
   return <DashboardFilterContext.Provider value={value}>{children}</DashboardFilterContext.Provider>;
 }
 

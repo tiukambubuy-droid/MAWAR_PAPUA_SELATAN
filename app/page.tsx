@@ -200,6 +200,7 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
   const [features, setFeatures] = useState<GeoFeature[]>([]);
   const [selectedName, setSelectedName] = useState(globalDistrict?.name ?? "");
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [isSlowLoading, setIsSlowLoading] = useState(false);
   const [sourceMode, setSourceMode] = useState<"live" | "local">("live");
   const [loadNonce, setLoadNonce] = useState(0);
   const [mapZoom, setMapZoom] = useState(1);
@@ -262,6 +263,8 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
   useEffect(() => {
     let cancelled = false;
     const controller = new AbortController();
+    queueMicrotask(() => { if (!cancelled) setIsSlowLoading(false); });
+    const slowTimer = window.setTimeout(() => setIsSlowLoading(true), 1200);
     const provinceQuery = new URLSearchParams({
       where: "wadmpr='Papua Selatan'",
       outFields: "namobj,wadmkk,wadmpr",
@@ -319,7 +322,7 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
         }
         if (!cancelled) setStatus("error");
       });
-    return () => { cancelled = true; controller.abort(); };
+    return () => { cancelled = true; controller.abort(); window.clearTimeout(slowTimer); };
   }, [level, loadNonce]);
 
   useEffect(() => {
@@ -385,8 +388,8 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
         {level === "district" && <><span>›</span><button className="current" onClick={() => { const next = reduceMapBreadcrumb("regency", filters); setDistrict(next.districtId); setSelectedName(""); resetZoom(); }}>Kabupaten Merauke</button>{selectedName && <><span>›</span><button className="current" onClick={() => { const next = reduceMapBreadcrumb("district", filters); setDistrict(next.districtId); }}>{selectedName}</button></>}</>}
       </div>
       <div className={`real-map-canvas ${focusedDistrict ? "district-detail-view" : ""}`}>
-        {status === "loading" && <div className="map-state"><span className="map-loader" /><strong>Memuat batas administrasi BIG…</strong><small>Menyiapkan geometri wilayah resmi</small></div>}
-        {status === "error" && <div className="map-state error"><strong>Peta resmi belum dapat dimuat</strong><small>Layanan BIG dan data cadangan belum berhasil dibaca.</small><button onClick={() => { setStatus("loading"); setLoadNonce(value => value + 1); }}>Coba lagi</button></div>}
+        {status === "loading" && <div className="map-state" role="status" aria-live="polite"><span className="map-loader" /><strong>Memuat peta resmi BIG...</strong><small>{isSlowLoading ? "Peta masih dimuat. Data indikator tetap tersedia." : "Menyiapkan geometri wilayah resmi"}</small></div>}
+        {status === "error" && <div className="map-state error"><strong>Peta resmi belum dapat dimuat</strong><small>Layanan BIG dan data cadangan belum berhasil dibaca.</small><button aria-label="Coba muat ulang peta BIG" onClick={() => { setStatus("loading"); setLoadNonce(value => value + 1); }}>Coba lagi</button></div>}
         {status === "ready" && mapModel && focusedDistrict ? (
           <div className="district-focus-layout">
             <section className="focused-map-card">
@@ -533,12 +536,6 @@ function LandPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const tableRef = useRef<HTMLElement | null>(null);
   const [mapContext, setMapContext] = useState<{ level: MapLevel; selectedName: string; districtNames: string[] }>({ level: "province", selectedName: "", districtNames: [] });
-  useEffect(() => {
-    if (!detailRow) return;
-    const closeDetail = (event: KeyboardEvent) => { if (event.key === "Escape") setDetailRow(null); };
-    document.addEventListener("keydown", closeDetail);
-    return () => document.removeEventListener("keydown", closeDetail);
-  }, [detailRow]);
   const handleMapContext = useMemo(
     () => (level: MapLevel, selectedName: string, districtNames: string[]) => {
       setTablePage(1);
@@ -781,9 +778,16 @@ function LandPage() {
   }, [detailRow, filters.seasonId, filters.snapshotId, layer]);
   useEffect(() => {
     if (!detailRow) return;
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setDetailRow(null); };
     window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("keydown", closeOnEscape);
+      document.body.style.overflow = previousOverflow;
+      window.requestAnimationFrame(() => trigger?.focus());
+    };
   }, [detailRow]);
 
   return (
@@ -855,15 +859,15 @@ function LandPage() {
         <div className="table-scroll"><table><thead><tr>{tableModel.headers.map(header => <th key={header}>{header}</th>)}<th>Detail</th></tr></thead><tbody>{!visibleRows.length && <tr><td colSpan={tableModel.headers.length + 1}>Tidak ada data sesuai filter.<small>Ubah pencarian atau filter untuk melihat data lainnya.</small></td></tr>}{visibleRows.map((row, rowIndex) => <tr key={`${row.cells[0]}-${rowIndex}`}>{row.cells.map((cell,i) => {
           const indicatorColor = layer === "Fase Tanam" ? phaseColors[cell] : layer === "Tingkat Risiko" ? riskColors[cell] : undefined;
           return <td key={i}>{i === row.statusIndex ? <span className={`status ${indicatorColor ? "layer-status" : cell !== "Baik" && cell !== "Aktif" ? "warn" : ""}`} style={indicatorColor ? { color: indicatorColor, borderColor: `${indicatorColor}55`, background: `${indicatorColor}18` } : undefined}>{cell}</span> : i === row.validationIndex ? <span className="validation"><i style={{width:cell}} />{cell}</span> : cell}</td>;
-        })}<td><button className="detail-button" onClick={() => setDetailRow(row)}>Lihat selengkapnya</button></td></tr>)}</tbody></table></div>
+        })}<td><button className="detail-button" aria-label={`Buka detail ${row.cells[0]}`} onClick={() => setDetailRow(row)}>Lihat selengkapnya</button></td></tr>)}</tbody></table></div>
         <div className="table-total">
           <div><strong>TOTAL HASIL</strong><small>Berdasarkan data yang sedang ditampilkan</small></div>
           {totalModel.map(item => <div key={item[0]}><span>{item[0]}</span><b>{item[1]}</b></div>)}
         </div>
         {!filterActive && totalPages > 1 && <div className="table-pagination">
-          <button disabled={tablePage === 1} onClick={() => setTablePage(page => Math.max(1, page - 1))}>← Sebelumnya</button>
+          <button disabled={tablePage === 1} aria-disabled={tablePage === 1} aria-label="Halaman sebelumnya" onClick={() => setTablePage(page => Math.max(1, page - 1))}>← Sebelumnya</button>
           <span>Halaman <strong>{tablePage}</strong> dari {totalPages}</span>
-          <button disabled={tablePage === totalPages} onClick={() => setTablePage(page => Math.min(totalPages, page + 1))}>Lihat selanjutnya →</button>
+          <button disabled={tablePage === totalPages} aria-disabled={tablePage === totalPages} aria-label="Halaman berikutnya" onClick={() => setTablePage(page => Math.min(totalPages, page + 1))}>Lihat selanjutnya →</button>
         </div>}
       </article>
       {detailRow && detailModel && createPortal(<div className="detail-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setDetailRow(null); }}>
@@ -907,9 +911,11 @@ function HomeContent() {
               key={label}
               className={activeNav === label ? "nav-item active" : "nav-item"}
               onClick={() => ["Ringkasan","Peta Lahan","Musim Tanam","Produksi"].includes(label) && setActiveNav(label)}
+              aria-label={`Buka halaman ${label}`}
+              aria-current={activeNav === label ? "page" : undefined}
               aria-disabled={!["Ringkasan","Peta Lahan","Musim Tanam","Produksi"].includes(label)}
             >
-              <span>{icon}</span>
+              <span aria-hidden="true">{icon}</span>
               <span>{label}</span>
             </button>
           ))}

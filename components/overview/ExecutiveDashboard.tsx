@@ -19,6 +19,7 @@ import {
 } from "@/lib/data-foundation";
 import { useDashboardFilters } from "@/components/DashboardFilterProvider";
 import { compareActualAtEquivalentStage, compareProjectedFinalToCompletedSeason, getChartDataPoints } from "@/lib/chart-data";
+import { useAccessibleModal } from "@/components/ui/useAccessibleModal";
 
 type PageName = "Peta Lahan" | "Musim Tanam" | "Produksi";
 
@@ -279,11 +280,7 @@ function ExecutiveProductionModal({
   seasonName: string; cutoff: string; scopeName: string;
   onClose: () => void; onOpenProduction: () => void;
 }) {
-  useEffect(() => {
-    const close = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    document.addEventListener("keydown", close);
-    return () => document.removeEventListener("keydown", close);
-  }, [onClose]);
+  useAccessibleModal(onClose);
 
   return createPortal(<div className="executive-modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="executive-production-modal" role="dialog" aria-modal="true" aria-labelledby="executive-production-title">

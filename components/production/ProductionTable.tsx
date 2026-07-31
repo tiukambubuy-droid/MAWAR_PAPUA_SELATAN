@@ -116,17 +116,19 @@ export function ProductionTable({
           {Math.min(page * 6, filtered.length)} dari {filtered.length} data
         </span>
         {filtered.length > 0 && <div>
-          <button disabled={page === 1} onClick={() => setPage((current) => current - 1)}>‹</button>
+          <button disabled={page === 1} aria-disabled={page === 1} aria-label="Halaman sebelumnya" onClick={() => setPage((current) => current - 1)}>‹</button>
           {Array.from({ length: pages }, (_, index) => (
             <button
               className={page === index + 1 ? "active" : ""}
               key={index}
+              aria-label={`Buka halaman ${index + 1}`}
+              aria-current={page === index + 1 ? "page" : undefined}
               onClick={() => setPage(index + 1)}
             >
               {index + 1}
             </button>
           ))}
-          <button disabled={page === pages} onClick={() => setPage((current) => current + 1)}>›</button>
+          <button disabled={page === pages} aria-disabled={page === pages} aria-label="Halaman berikutnya" onClick={() => setPage((current) => current + 1)}>›</button>
         </div>}
       </div>
     </article>

@@ -2,8 +2,10 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import type { PlantingSeason } from "@/types/planting-season";
+import { useAccessibleModal } from "@/components/ui/useAccessibleModal";
 
 export function ManageSeasonModal({ onClose, onAdd }: { onClose: () => void; onAdd: (season: PlantingSeason) => void }) {
+  useAccessibleModal(onClose);
   const [name, setName] = useState("MT V 2026");
   const [start, setStart] = useState("2026-12-01");
   const [end, setEnd] = useState("2027-04-30");
