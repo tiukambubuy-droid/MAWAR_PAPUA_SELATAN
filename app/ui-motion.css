@@ -23,8 +23,10 @@ button:focus-visible, select:focus-visible, input:focus-visible, [role="button"]
   background:linear-gradient(145deg,#fbfdfb,#edf6f1); animation:loadingFade var(--motion-normal) var(--motion-ease) both;
 }
 .loading-brand { max-width:1500px; margin:0 auto 24px; display:flex; align-items:center; gap:16px; }
-.loading-mark { width:52px; height:52px; border-radius:15px; display:grid; place-items:center; color:#b8871d; background:#f7ebc9; font-size:28px; }
+.loading-mark { width:58px; height:68px; display:grid; place-items:center; }
+.loading-mark img { width:48px; height:60px; object-fit:contain; }
 .loading-brand h1 { margin:0; font-size:clamp(24px,3vw,34px); line-height:1.15; }
+.loading-brand strong { display:block; margin-top:5px; color:#315f50; font-size:clamp(12px,1.2vw,15px); }
 .loading-brand p { margin:7px 0 0; color:#60766c; font-size:clamp(13px,1.4vw,16px); }
 .dashboard-skeleton { max-width:1500px; margin:auto; display:grid; gap:14px; }
 .skeleton-card,.skeleton-line {

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
+import Image from "next/image";
 import SeasonCommandCenter from "@/components/season/SeasonPage";
 import ProductionCommandCenter from "@/components/production/ProductionPage";
 import ExecutiveDashboard from "@/components/overview/ExecutiveDashboard";
@@ -13,6 +14,7 @@ import {
   getChildrenByRegionId,
   getRegionById,
   getRegionByName,
+  getSeasonById,
 } from "@/lib/data-foundation";
 import { phaseColors, reduceMapBreadcrumb, riskColors, selectPhaseMonitoring, selectRiskMonitoring } from "@/lib/map-monitoring";
 
@@ -792,7 +794,8 @@ function LandPage() {
 
   return (
     <div className="subpage page-enter">
-      <PageTitle eyebrow="PEMANTAUAN SPASIAL" title="Peta Lahan Pertanian" description="Sebaran lahan sawah, fase pertumbuhan, dan status pemantauan Kabupaten Merauke" />
+      <PageTitle eyebrow="PEMANTAUAN SPASIAL" title="Peta Lahan Pertanian" description="Pemantauan lahan padi Papua Selatan" />
+      <div className="prototype-scope page-scope">Cakupan data aktif: Kabupaten Merauke</div>
       <section className="sub-toolbar">
         <div className="segmented" aria-label="Lapisan peta">
           {(["Luas Tanam", "Fase Tanam", "Tingkat Risiko"] as LandLayer[]).map(item => <button key={item} className={layer === item ? "on" : ""} onClick={() => { setLayer(item); setTablePage(1); setCategoryFilter("Semua"); setMinimumFilter("Semua"); setDetailRow(null); }}>{item}</button>)}
@@ -897,14 +900,36 @@ function ProductionPage() {
 
 function HomeContent() {
   const [activeNav, setActiveNav] = useState("Ringkasan");
+  const { filters } = useDashboardFilters();
+  const printDistrict = filters.districtId ? getRegionById(filters.districtId) : null;
+  const printVillage = filters.villageId ? getRegionById(filters.villageId) : null;
+  const printSeason = getSeasonById(filters.seasonId);
+  const printScope = printVillage
+    ? `${printVillage.administrative_type === "kelurahan" ? "Kelurahan" : "Kampung"} ${printVillage.name}`
+    : printDistrict ? `Distrik ${printDistrict.name}` : "Kabupaten Merauke";
 
   return (
-    <main className="app-shell">
-      <aside className="sidebar">
-        <div className="brand-mark" aria-label="Sistem Informasi Pangan Papua Selatan">
-          <span className="grain">♨</span>
-          <strong>SI</strong>
+    <>
+      <header className="print-brand-header">
+        <Image src="/branding/icons/app-icon-192.png" alt="Lambang Pemerintah Provinsi Papua Selatan" width={72} height={72} priority />
+        <div className="print-brand-identity">
+          <strong>MAWAR PAPUA SELATAN</strong>
+          <span>Model Aksi Wadah Kolaborasi &amp; Resiliensi</span>
+          <b>Dashboard Pemantauan Padi dan Ketahanan Pangan</b>
         </div>
+        <div className="print-brand-context">
+          <span>Laporan: {activeNav}</span>
+          <span>Wilayah aktif: {printScope}</span>
+          <span>Musim aktif: {printSeason?.display_name ?? filters.seasonId}</span>
+          <span>Dicetak berdasarkan pembaruan 24 Juli 2026 · 22.42 WIT</span>
+        </div>
+      </header>
+      <main className="app-shell">
+      <aside className="sidebar">
+        <button type="button" className="brand-mark" aria-label="Buka beranda MAWAR Papua Selatan" onClick={() => setActiveNav("Ringkasan")}>
+          <Image className="brand-logo" src="/branding/logo-papua-selatan.png" alt="" width={48} height={60} priority />
+          <span className="brand-copy"><strong>MAWAR</strong><small>Papua Selatan</small></span>
+        </button>
         <nav aria-label="Navigasi utama">
           {nav.map(([icon, label]) => (
             <button
@@ -930,10 +955,10 @@ function HomeContent() {
       <section className="workspace">
         <header className="topbar">
           <div className="identity">
-            <div className="mini-emblem">♨</div>
+            <Image className="identity-logo" src="/branding/logo-papua-selatan.png" alt="Lambang Pemerintah Provinsi Papua Selatan" width={36} height={45} priority />
             <div>
-              <strong>SIPANGAN PAPUA SELATAN</strong>
-              <span>Pusat Kendali Padi & Beras</span>
+              <strong>MAWAR PAPUA SELATAN</strong>
+              <span>Model Aksi Wadah Kolaborasi &amp; Resiliensi</span>
             </div>
           </div>
           <div className="trust">
@@ -951,10 +976,11 @@ function HomeContent() {
           {activeNav === "Musim Tanam" && <SeasonPage />}
           {activeNav === "Produksi" && <ProductionPage />}
 
-          <footer><span>Data pada prototipe bersifat demonstratif dan perlu divalidasi sebelum digunakan sebagai dasar kebijakan.</span><strong>© 2026 Pemerintah Provinsi Papua Selatan</strong></footer>
+          <footer><span>Data pada prototipe bersifat simulasi dan perlu divalidasi sebelum digunakan sebagai dasar kebijakan.</span><strong>© 2026 Pemerintah Provinsi Papua Selatan</strong></footer>
         </div>
       </section>
-    </main>
+      </main>
+    </>
   );
 }
 

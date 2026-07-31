@@ -28,7 +28,7 @@ test("reduced motion disables primary animation and transition", () => {
 test("initial loading has live busy semantics and no dummy KPI values", () => {
   assert.match(loading, /aria-busy="true"/);
   assert.match(loading, /aria-live="polite"/);
-  assert.match(loading, /Menyiapkan Dashboard Pemantauan/);
+  assert.match(loading, /Menyiapkan MAWAR Papua Selatan/);
   assert.match(loading, /Memuat data wilayah, musim tanam, dan produksi/);
   assert.doesNotMatch(loading, /NaN|undefined|\d{2,}[.,]\d{3}/);
   assert.match(provider, /setHydrated\(true\).*300/s);

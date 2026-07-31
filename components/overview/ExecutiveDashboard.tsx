@@ -7,6 +7,7 @@ import {
   Download, Gauge, LandPlot, MapPin, PackageCheck, Sprout,
   Target, Tractor, TrendingUp, Wheat, X,
 } from "lucide-react";
+import { mawarReportSlug, printWithMawarTitle } from "@/lib/report-branding";
 import { aggregateProduction, recordsForScope } from "@/lib/production-data";
 import {
   aggregateRegion,
@@ -90,10 +91,11 @@ export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: 
     <div className="executive-dashboard page-enter">
       <section className="executive-heading">
         <div>
-          <h1>Dashboard Pemantauan Padi dan Beras</h1>
-          <p>Kabupaten Merauke, Papua Selatan</p>
+          <h1>Dashboard Pemantauan Padi dan Ketahanan Pangan</h1>
+          <p>Papua Selatan</p>
+          <span className="prototype-scope">Cakupan prototipe: Kabupaten Merauke</span>
         </div>
-        <button onClick={() => window.print()}><Download size={17}/> Unduh Laporan</button>
+        <button onClick={() => printWithMawarTitle(mawarReportSlug("produksi", "Kabupaten Merauke", currentSeason?.display_name))}><Download size={17}/> Unduh Laporan</button>
       </section>
 
       <section className="card executive-filters" aria-label="Filter global dashboard">

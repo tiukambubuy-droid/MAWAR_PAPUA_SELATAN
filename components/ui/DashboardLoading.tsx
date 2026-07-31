@@ -1,12 +1,15 @@
 "use client";
 
+import Image from "next/image";
+
 export function DashboardLoading() {
   return (
     <main className="dashboard-loading" aria-busy="true" aria-live="polite">
       <section className="loading-brand">
-        <span className="loading-mark" aria-hidden="true">♨</span>
+        <span className="loading-mark"><Image src="/branding/logo-papua-selatan.png" alt="" width={44} height={55} priority /></span>
         <div>
-          <h1>Menyiapkan Dashboard Pemantauan</h1>
+          <h1>Menyiapkan MAWAR Papua Selatan</h1>
+          <strong>Model Aksi Wadah Kolaborasi &amp; Resiliensi</strong>
           <p>Memuat data wilayah, musim tanam, dan produksi...</p>
         </div>
       </section>

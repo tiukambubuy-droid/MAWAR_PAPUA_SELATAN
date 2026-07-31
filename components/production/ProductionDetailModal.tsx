@@ -9,6 +9,7 @@ import {
 import type { ProductionRecord } from "@/types/production";
 import type { Season } from "@/lib/data-foundation";
 import { useAccessibleModal } from "@/components/ui/useAccessibleModal";
+import { mawarReportSlug, printWithMawarTitle } from "@/lib/report-branding";
 
 const number = (value: number, decimals = 0) =>
   value.toLocaleString("id-ID", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
@@ -56,10 +57,10 @@ export function ProductionDetailModal({ row, recordId, seasonId, regionId, conte
 
   const handlePrint = () => {
     document.body.classList.add("production-detail-printing");
-    const cleanup = () => document.body.classList.remove("production-detail-printing");
-    window.addEventListener("afterprint", cleanup, { once: true });
-    window.print();
-    window.setTimeout(cleanup, 1000);
+    printWithMawarTitle(
+      mawarReportSlug("produksi", selectedVillage, season?.display_name),
+      () => document.body.classList.remove("production-detail-printing"),
+    );
   };
 
   return createPortal(
@@ -67,7 +68,7 @@ export function ProductionDetailModal({ row, recordId, seasonId, regionId, conte
       <section className="production-detail-modal" role="dialog" aria-modal="true" aria-labelledby="production-detail-title">
         <header className="production-detail-header">
           <div className="production-detail-identity">
-            <small>DETAIL PRODUKSI PER KAMPUNG</small>
+            <small>MAWAR PAPUA SELATAN · DETAIL PRODUKSI PER KAMPUNG</small>
             <h2 id="production-detail-title">{selectedVillage}</h2>
             <div>
               <span><MapPinned size={14} /> Distrik {selectedDistrict}</span>
@@ -145,7 +146,7 @@ export function ProductionDetailModal({ row, recordId, seasonId, regionId, conte
         </div>
 
         <footer className="production-detail-footer">
-          <span>Data demonstrasi · diperbarui 24 Juli 2026</span>
+          <span>MAWAR Papua Selatan · Data demonstrasi · diperbarui 24 Juli 2026</span>
           <div><button aria-label="Tutup detail produksi" onClick={onClose}><X size={16} /> Tutup</button><button aria-label="Cetak detail produksi" onClick={handlePrint}><Printer size={16} /> Cetak</button><button className="primary" aria-label="Export detail produksi ke PDF" onClick={handlePrint}><Download size={16} /> Export PDF</button></div>
         </footer>
       </section>

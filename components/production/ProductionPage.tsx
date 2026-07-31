@@ -24,7 +24,7 @@ export default function ProductionPage() {
   const scope=village?`${village.administrative_type === "kelurahan" ? "Kelurahan" : "Kampung"} ${village.name}`:district?`Distrik ${district.name}`:"Kabupaten Merauke";
   const unavailable = (district && district.monitoring_status !== "active") || (village && village.monitoring_status !== "active");
   return <div className="subpage page-enter production-page">
-    <section className="production-heading"><div><h1>PRODUKSI</h1><p>Pemantauan Produksi Padi - Kabupaten Merauke</p></div><span><i/>Data simulasi aktif</span></section>
+    <section className="production-heading"><div><h1>PRODUKSI</h1><p>Pemantauan produksi padi Papua Selatan</p><span className="prototype-scope">Cakupan data aktif: Kabupaten Merauke</span></div><span><i/>Data simulasi aktif</span></section>
     <ProductionFilters seasonId={seasonId} districtId={districtId} villageId={villageId} onSeason={value=>{setSeason(value);setDetail(null);}} onDistrict={value=>{setDistrict(value);setDetail(null);}} onVillage={value=>{setVillage(value);setDetail(null);}}/>
     <div className="production-breadcrumb">Papua Selatan <b>›</b> Kabupaten Merauke {district&&<><b>›</b><strong>Distrik {district.name}</strong></>} {village&&<><b>›</b><strong>{village.name}</strong></>}</div>
     {unavailable && <section className="card">Belum dipantau — belum tersedia data terverifikasi untuk wilayah ini.</section>}
