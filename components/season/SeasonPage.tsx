@@ -47,8 +47,7 @@ export default function SeasonPage() {
   const scopeKpis = selectedSeason ? getSeasonKpis(selectedSeason.id, scopeKey) : null;
   const rowNodes = selectedVillage ? [selectedVillage] : selectedDistrict ? villages : districts;
   const rows = monitoringRows(rowNodes.map(item => item.name), scopeKey, selectedSeason?.id);
-  const composition = phaseComposition(scopeKey, safeMonth, selectedSeason?.id);
-  const previousComposition = phaseComposition(scopeKey, Math.max(0, safeMonth - 1), selectedSeason?.id);
+  const composition = phaseComposition(scopeKey, selectedSeason?.id);
   const insights = month ? buildSeasonInsights(rows, month, scope) : [];
   const tableTitle = selectedVillage
     ? `RINCIAN DATA — KAMPUNG/KELURAHAN ${selectedVillage.name.toUpperCase()}`
@@ -83,7 +82,7 @@ export default function SeasonPage() {
       <section className="season-analytics-grid">
         <SeasonSummaryCards title={selectedSeason.name} month={month} scale={scale} scope={scope} production={scopeKpis?.aggregate.gkg_production_ton ?? 0} rice={scopeKpis?.estimated_rice_ton ?? 0} />
         <SeasonProgressChart months={months} active={safeMonth} title={selectedSeason.name} seasonId={seasonId} scale={scale} />
-        <PhaseCompositionChart values={composition} previousValues={previousComposition} total={Math.round(month.realized * scale)} label={`${month.label} ${month.year} · ${scope}`} validation={month.validation} previousLabel={safeMonth > 0 ? `${months[safeMonth - 1].label} ${months[safeMonth - 1].year}` : undefined} />
+        <PhaseCompositionChart values={composition} total={Math.round(scopeTotal)} label={`DATA TERBARU ${selectedSeason.name} · ${scope}`} validation={month.validation} />
       </section>
       <section className="season-bottom-grid">
         <SeasonMonitoringTable key={`${seasonId}:${scopeKey}`} title={tableTitle} rows={rows} entityLabel={entityLabel} onSelect={selectRow} onDetail={setDetail} />

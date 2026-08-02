@@ -15,10 +15,17 @@ import {
   getRegionById,
   getRegionByName,
   getSeasonById,
+  regions,
 } from "@/lib/data-foundation";
+import { createBigMapRequestController, createBigMapViewCallbacks, reduceBigMapViewState, type BigMapRequestController, type BigMapViewState } from "@/lib/big-map-request-controller";
 import { phaseColors, reduceMapBreadcrumb, riskColors, selectPhaseMonitoring, selectRiskMonitoring } from "@/lib/map-monitoring";
+import { defineLandMetric, formatPresentationValue, getValidationSummary, resolveTableRegionNames } from "@/lib/presentation-selectors";
 
 const activeRegionCounts = getActiveMonitoringRegionCounts();
+const canonicalDistrictNames = regions
+  .filter(region => region.administrative_type === "district" && region.parent_id === "93.01")
+  .map(region => region.name)
+  .sort((a, b) => a.localeCompare(b, "id"));
 
 const nav = [
   ["▦", "Ringkasan"],
@@ -38,10 +45,6 @@ const regencyRows: LandTableRow[] = [
   { cells: ["Merauke", "22 distrik", "38.180 ha", "31.854 ha", "174.577 ton", "Aktif", "91%"], statusIndex: 5, validationIndex: 6 },
 ];
 
-function seededNumber(name: string) {
-  return [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0);
-}
-
 function districtVillageCount(name: string) {
   const district = getRegionByName(name, "district");
   return district ? getChildrenByRegionId(district.id).length : 0;
@@ -57,32 +60,38 @@ function profileRegionId(name: string) {
     "93.01";
 }
 
-function phaseProfile(name: string, seasonId: string, snapshotId: string | null) {
-  const selected = selectPhaseMonitoring(seasonId, profileRegionId(name), snapshotId);
-  const progress = Math.round(selected.composition[selected.dominant] ?? 0);
+function phaseProfile(name: string, seasonId: string, regionId = profileRegionId(name)) {
+  const selected = selectPhaseMonitoring(seasonId, regionId);
+  const dominant = selected.dominantDetail;
+  const progress = dominant.percentage ?? null;
   return {
-    phase: selected.dominant,
+    phase: dominant.label,
     progress,
     age: null,
-    planted: Math.round(selected.total),
+    planted: dominant.areaHa === null ? null : Math.round(dominant.areaHa),
     ready: Math.round(selected.total * ((selected.composition["Siap Panen"] ?? 0) / 100)),
     start: "Mengikuti periode musim",
     harvest: "Mengikuti data monitoring",
     monitored: selected.monitored,
+    items: selected.items,
+    total: selected.total,
   };
 }
 
-function riskProfile(name: string, seasonId: string, snapshotId: string | null) {
-  const selected = selectRiskMonitoring(seasonId, profileRegionId(name), snapshotId);
-  const score = Math.round(selected.composition[selected.dominant] ?? 0);
+function riskProfile(name: string, seasonId: string, regionId = profileRegionId(name)) {
+  const selected = selectRiskMonitoring(seasonId, regionId);
+  const dominant = selected.dominantDetail;
   return {
-    level: selected.dominant,
-    threat: "Tidak tersedia pada data prototipe",
-    affected: Math.round(selected.total),
-    score,
-    villages: selected.monitored ? districtVillageCount(name) : 0,
+    level: dominant.label,
+    threat: "Informasi ancaman khusus belum tersedia pada data prototipe.",
+    affected: dominant.affectedAreaHa === null ? null : Math.round(dominant.affectedAreaHa),
+    score: null,
+    percentage: dominant.percentage,
+    villages: selected.monitoredLocationCount,
     recommendation: selected.monitored ? "Lanjutkan pemantauan berdasarkan tingkat risiko terukur." : "Belum dipantau",
     monitored: selected.monitored,
+    items: selected.items,
+    total: selected.total,
   };
 }
 
@@ -90,9 +99,9 @@ function numericValue(value: string) {
   return Number(value.replace(/[^\d]/g, "")) || 0;
 }
 
-function layerColor(layer: LandLayer, name: string, seasonId: string, snapshotId: string | null) {
-  if (layer === "Fase Tanam") return phaseColors[phaseProfile(name, seasonId, snapshotId).phase];
-  if (layer === "Tingkat Risiko") return riskColors[riskProfile(name, seasonId, snapshotId).level];
+function layerColor(layer: LandLayer, name: string, seasonId: string) {
+  if (layer === "Fase Tanam") return phaseColors[phaseProfile(name, seasonId).phase];
+  if (layer === "Tingkat Risiko") return riskColors[riskProfile(name, seasonId).level];
   return "";
 }
 
@@ -111,6 +120,9 @@ function makeDistrictSummary(name: string, seasonId = "MT2-2026") {
     target: Math.round(target),
     land: Math.round(aggregate.mapped_land_ha).toLocaleString("id-ID"),
     planted: Math.round(aggregate.planting_realization_ha).toLocaleString("id-ID"),
+    landMetric: defineLandMetric("mapped_land", aggregate.mapped_land_ha),
+    plantedMetric: defineLandMetric("realized_planted_area", aggregate.planting_realization_ha),
+    harvestedMetric: defineLandMetric("harvested_area", aggregate.harvested_area_ha),
     villages: districtVillageCount(name),
     condition: region?.monitoring_status !== "active" ? "Belum dipantau" : target >= 85 ? "Baik" : target >= 70 ? "Waspada" : "Perlu verifikasi",
     updated: seasonId === "MT2-2026" ? "24 Juli 2026" : "31 Maret 2026",
@@ -120,6 +132,8 @@ function makeDistrictSummary(name: string, seasonId = "MT2-2026") {
 function makeDistrictRows(names: string[], seasonId = "MT2-2026"): LandTableRow[] {
   return names.map(name => {
     const summary = makeDistrictSummary(name, seasonId);
+    const region = getRegionByName(name, "district");
+    const validation = region?.monitoring_status === "active" ? aggregateRegion(region.id, seasonId).validation_rate : null;
     return {
       cells: [
         name,
@@ -128,7 +142,7 @@ function makeDistrictRows(names: string[], seasonId = "MT2-2026"): LandTableRow[
         `${summary.harvest} ha`,
         `${summary.gkg} ton`,
         summary.condition,
-        `${summary.target}%`,
+        validation === null ? "Belum dipantau" : `${Math.round(validation)}%`,
       ],
       statusIndex: 5,
       validationIndex: 6,
@@ -139,9 +153,8 @@ function makeDistrictRows(names: string[], seasonId = "MT2-2026"): LandTableRow[
 function makeVillageRows(district: string, seasonId = "MT2-2026"): LandTableRow[] {
   const districtRegion = getRegionByName(district, "district");
   const children = districtRegion ? getChildrenByRegionId(districtRegion.id) : [];
-  return children.map((region, index) => {
+  return children.map((region) => {
     const aggregate = aggregateRegion(region.id, seasonId);
-    const seed = seededNumber(region.id);
     const validation = Math.round(aggregate.validation_rate);
     const status = validation >= 86 ? "Baik" : validation >= 74 ? "Waspada" : "Verifikasi";
     return {
@@ -149,7 +162,7 @@ function makeVillageRows(district: string, seasonId = "MT2-2026"): LandTableRow[
         region.name,
         `${aggregate.mapped_land_ha.toLocaleString("id-ID")} ha`,
         `${aggregate.planting_realization_ha.toLocaleString("id-ID")} ha`,
-        ["Persiapan", "Vegetatif", "Generatif", "Pematangan"][(seed + index) % 4],
+        phaseProfile(region.name, seasonId).phase,
         `${aggregate.gkg_production_ton.toLocaleString("id-ID")} ton`,
         status,
         `${validation}%`,
@@ -199,17 +212,17 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
   const { filters, setDistrict } = useDashboardFilters();
   const globalDistrict = filters.districtId ? getRegionById(filters.districtId) : null;
   const [level, setLevel] = useState<MapLevel>(filters.districtId ? "district" : "province");
-  const [features, setFeatures] = useState<GeoFeature[]>([]);
+  const [mapRequestState, setMapRequestState] = useState<BigMapViewState<GeoFeature>>({ features: [], sourceMode: "big", status: "loading", context: null });
+  const { features, sourceMode, status } = mapRequestState;
   const [selectedName, setSelectedName] = useState(globalDistrict?.name ?? "");
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [isSlowLoading, setIsSlowLoading] = useState(false);
-  const [sourceMode, setSourceMode] = useState<"live" | "local">("live");
-  const [loadNonce, setLoadNonce] = useState(0);
   const [mapZoom, setMapZoom] = useState(1);
   const [mapPan, setMapPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const dragRef = useRef({ pointerId: -1, x: 0, y: 0, originX: 0, originY: 0, moved: false });
   const suppressClickRef = useRef(false);
+  const requestControllerRef = useRef<BigMapRequestController<GeoFeature> | null>(null);
+  const slowTimerRef = useRef(0);
 
   const zoomIn = () => setMapZoom(value => Math.min(3, Number((value + 0.25).toFixed(2))));
   const zoomOut = () => setMapZoom(value => {
@@ -263,10 +276,6 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
   );
 
   useEffect(() => {
-    let cancelled = false;
-    const controller = new AbortController();
-    queueMicrotask(() => { if (!cancelled) setIsSlowLoading(false); });
-    const slowTimer = window.setTimeout(() => setIsSlowLoading(true), 1200);
     const provinceQuery = new URLSearchParams({
       where: "wadmpr='Papua Selatan'",
       outFields: "namobj,wadmkk,wadmpr",
@@ -285,47 +294,45 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
       maxAllowableOffset: "0.001",
       f: "geojson",
     });
-    const url = level === "province"
-      ? `${bigService}/13/query?${provinceQuery}`
-      : `${bigDistrictService}/0/query?${districtQuery}`;
-
-    fetch(url, { signal: controller.signal })
-      .then(response => {
+    const viewCallbacks = createBigMapViewCallbacks<GeoFeature>(event => {
+      window.clearTimeout(slowTimerRef.current);
+      setIsSlowLoading(false);
+      setMapRequestState(state => reduceBigMapViewState(state, event));
+      if (event.type === "loading") slowTimerRef.current = window.setTimeout(() => setIsSlowLoading(true), 1200);
+    });
+    const controller = createBigMapRequestController<GeoFeature>({
+      loadRemote: async (context, signal) => {
+        const url = context.regionLevel === "province"
+          ? `${bigService}/13/query?${provinceQuery}`
+          : `${bigDistrictService}/0/query?${districtQuery}`;
+        const response = await fetch(url, { signal });
         if (!response.ok) throw new Error("BIG service unavailable");
-        return response.json();
-      })
-      .then(data => {
-        if (cancelled) return;
-        const next = Array.isArray(data.features) ? data.features : [];
-        if (!next.length) throw new Error("No boundary features");
-        setFeatures(next);
-        setSourceMode("live");
-        setStatus("ready");
-      })
-      .catch(async (error) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        if (cancelled) return;
-        if (level === "district") {
-          try {
-            const response = await fetch("/data/merauke-districts.geojson");
-            if (!response.ok) throw new Error("Local boundary unavailable");
-            const data = await response.json();
-            const next = Array.isArray(data.features) ? data.features : [];
-            if (!next.length) throw new Error("No local boundary features");
-            if (!cancelled) {
-              setFeatures(next);
-              setSourceMode("local");
-              setStatus("ready");
-            }
-            return;
-          } catch {
-            // The shared error state below handles both unavailable sources.
-          }
-        }
-        if (!cancelled) setStatus("error");
-      });
-    return () => { cancelled = true; controller.abort(); window.clearTimeout(slowTimer); };
-  }, [level, loadNonce]);
+        const data = await response.json() as { features?: GeoFeature[] };
+        return Array.isArray(data.features) ? data.features : [];
+      },
+      loadFallback: async (context, signal) => {
+        if (context.regionLevel !== "district") throw new Error("Province fallback unavailable");
+        const response = await fetch("/data/merauke-districts.geojson", { signal });
+        if (!response.ok) throw new Error("Local boundary unavailable");
+        const data = await response.json() as { features?: GeoFeature[] };
+        return Array.isArray(data.features) ? data.features : [];
+      },
+    }, viewCallbacks);
+    requestControllerRef.current = controller;
+    return () => {
+      window.clearTimeout(slowTimerRef.current);
+      controller.dispose();
+      if (requestControllerRef.current === controller) requestControllerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    const controller = requestControllerRef.current;
+    if (!controller) return;
+    const regionId = level === "province" ? "93" : globalDistrict?.id ?? "93.01";
+    void controller.load({ requestKey: `geometry:${level}:${regionId}`, regionId, regionLevel: level });
+    return () => controller.cancel();
+  }, [globalDistrict?.id, level]);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -375,23 +382,23 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
   );
 
   useEffect(() => {
-    const districtNames = level === "district" && mapModel ? mapModel.map(item => item.name).sort((a, b) => a.localeCompare(b, "id")) : [];
+    const districtNames = level === "district" ? canonicalDistrictNames : [];
     onContextChange(level, selectedName, districtNames);
-  }, [level, mapModel, onContextChange, selectedName]);
+  }, [level, onContextChange, selectedName]);
 
   const districtDummy = useMemo(() => makeDistrictSummary(selectedName, filters.seasonId), [filters.seasonId, selectedName]);
-  const selectedPhase = useMemo(() => phaseProfile(selectedName, filters.seasonId, filters.snapshotId), [filters.seasonId, filters.snapshotId, selectedName]);
-  const selectedRisk = useMemo(() => riskProfile(selectedName, filters.seasonId, filters.snapshotId), [filters.seasonId, filters.snapshotId, selectedName]);
+  const selectedPhase = useMemo(() => phaseProfile(selectedName, filters.seasonId), [filters.seasonId, selectedName]);
+  const selectedRisk = useMemo(() => riskProfile(selectedName, filters.seasonId), [filters.seasonId, selectedName]);
 
   return (
     <div className="real-map-shell">
       <div className="map-breadcrumb">
-        <button onClick={() => { const next = reduceMapBreadcrumb("province", filters); setDistrict(next.districtId); setStatus("loading"); setLevel("province"); setSelectedName(""); resetZoom(); }} className={level === "province" ? "current" : ""}>Papua Selatan</button>
+        <button onClick={() => { const next = reduceMapBreadcrumb("province", filters); setDistrict(next.districtId); setLevel("province"); setSelectedName(""); resetZoom(); }} className={level === "province" ? "current" : ""}>Papua Selatan</button>
         {level === "district" && <><span>›</span><button className="current" onClick={() => { const next = reduceMapBreadcrumb("regency", filters); setDistrict(next.districtId); setSelectedName(""); resetZoom(); }}>Kabupaten Merauke</button>{selectedName && <><span>›</span><button className="current" onClick={() => { const next = reduceMapBreadcrumb("district", filters); setDistrict(next.districtId); }}>{selectedName}</button></>}</>}
       </div>
       <div className={`real-map-canvas ${focusedDistrict ? "district-detail-view" : ""}`}>
         {status === "loading" && <div className="map-state" role="status" aria-live="polite"><span className="map-loader" /><strong>Memuat peta resmi BIG...</strong><small>{isSlowLoading ? "Peta masih dimuat. Data indikator tetap tersedia." : "Menyiapkan geometri wilayah resmi"}</small></div>}
-        {status === "error" && <div className="map-state error"><strong>Peta resmi belum dapat dimuat</strong><small>Layanan BIG dan data cadangan belum berhasil dibaca.</small><button aria-label="Coba muat ulang peta BIG" onClick={() => { setStatus("loading"); setLoadNonce(value => value + 1); }}>Coba lagi</button></div>}
+        {status === "error" && <div className="map-state error"><strong>Peta resmi belum dapat dimuat</strong><small>Layanan BIG dan data cadangan belum berhasil dibaca.</small><button aria-label="Coba muat ulang peta BIG" onClick={() => { void requestControllerRef.current?.retry(); }}>Coba lagi</button></div>}
         {status === "ready" && mapModel && focusedDistrict ? (
           <div className="district-focus-layout">
             <section className="focused-map-card">
@@ -410,12 +417,12 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
                   {...panProps}
                 >
                   <g className="map-zoom-layer" style={{ transform: mapTransform, transformOrigin: `${focusedDistrict.center[0]}px ${focusedDistrict.center[1]}px` }}>
-                    <path className="focused-district-shape" d={focusedDistrict.path} vectorEffect="non-scaling-stroke" style={layer !== "Luas Tanam" ? { fill: layerColor(layer, focusedDistrict.name, filters.seasonId, filters.snapshotId) } : undefined} />
+                    <path className="focused-district-shape" d={focusedDistrict.path} vectorEffect="non-scaling-stroke" style={layer !== "Luas Tanam" ? { fill: layerColor(layer, focusedDistrict.name, filters.seasonId) } : undefined} />
                     <text className="focused-district-label" x={focusedDistrict.center[0]} y={focusedDistrict.center[1]} textAnchor="middle">{focusedDistrict.name}</text>
                   </g>
                 </svg>
               </div>
-              <footer><span>◉</span> Badan Informasi Geospasial · WGS 84{sourceMode === "local" ? " · cadangan lokal" : ""}</footer>
+              <footer><span>◉</span> Badan Informasi Geospasial · WGS 84{sourceMode === "fallback" ? " · cadangan lokal" : ""}</footer>
             </section>
             <aside className="district-data-card">
               {layer === "Luas Tanam" ? <>
@@ -424,9 +431,9 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
                 <div className={`district-condition ${districtDummy.condition === "Baik" ? "good" : "watch"}`}>{districtDummy.condition}</div>
               </div>
               <div className="district-data-grid">
-                <div><span>Luas lahan</span><strong>{districtDummy.land}</strong><small>ha</small></div>
-                <div><span>Luas tanam</span><strong>{districtDummy.planted}</strong><small>ha</small></div>
-                <div><span>Luas panen</span><strong>{districtDummy.harvest}</strong><small>ha</small></div>
+                  <div title={districtDummy.landMetric.description}><span>{districtDummy.landMetric.label}</span><strong>{districtDummy.land}</strong><small>ha</small></div>
+                <div title={districtDummy.plantedMetric.description}><span>{districtDummy.plantedMetric.label}</span><strong>{districtDummy.planted}</strong><small>ha</small></div>
+                <div title={districtDummy.harvestedMetric.description}><span>{districtDummy.harvestedMetric.label}</span><strong>{districtDummy.harvest}</strong><small>ha</small></div>
                 <div><span>Produksi GKG</span><strong>{districtDummy.gkg}</strong><small>ton</small></div>
                 <div><span>Estimasi beras</span><strong>{districtDummy.rice}</strong><small>ton</small></div>
                 <div><span>Produktivitas</span><strong>{districtDummy.yield}</strong><small>ton/ha</small></div>
@@ -444,14 +451,14 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
                 </div>
                 <div className="district-data-grid">
                   <div><span>Fase dominan</span><strong>{selectedPhase.phase}</strong></div>
-                  <div><span>Progres fase</span><strong>{selectedPhase.progress}</strong><small>%</small></div>
-                  <div><span>Umur tanaman</span><strong>{selectedPhase.age}</strong><small>hari</small></div>
-                  <div><span>Luas dalam fase</span><strong>{selectedPhase.planted.toLocaleString("id-ID")}</strong><small>ha</small></div>
+                  <div><span>Progres fase</span><strong>{formatPresentationValue(selectedPhase.progress, "%")}</strong></div>
+                  <div><span>Umur tanaman</span><strong>{formatPresentationValue(selectedPhase.age, "hari")}</strong></div>
+                  <div><span>Luas dalam fase</span><strong>{formatPresentationValue(selectedPhase.planted, "ha")}</strong></div>
                   <div><span>Siap panen</span><strong>{selectedPhase.ready.toLocaleString("id-ID")}</strong><small>ha</small></div>
                   <div><span>Kampung terpantau</span><strong>{districtDummy.villages}</strong><small>kampung</small></div>
                 </div>
                 <div className="district-data-summary"><div><span>Mulai tanam</span><strong>{selectedPhase.start}</strong></div><div><span>Estimasi panen</span><strong>{selectedPhase.harvest}</strong></div></div>
-                <div className="district-progress-bar phase-progress"><i style={{ width: `${selectedPhase.progress}%`, background: phaseColors[selectedPhase.phase] }} /></div>
+                <div className="district-progress-bar phase-progress"><i style={{ width: `${selectedPhase.progress ?? 0}%`, background: phaseColors[selectedPhase.phase] }} /></div>
                 <small className="district-updated">Data simulasi fase tanam · {districtDummy.updated}</small>
               </> : <>
                 <div className="district-data-heading">
@@ -460,14 +467,14 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
                 </div>
                 <div className="district-data-grid">
                   <div><span>Tingkat risiko</span><strong>{selectedRisk.level}</strong></div>
-                  <div><span>Skor risiko</span><strong>{selectedRisk.score}</strong><small>/100</small></div>
+                  <div><span>Skor risiko</span><strong>{formatPresentationValue(selectedRisk.score)}</strong></div>
                   <div><span>Ancaman dominan</span><strong>{selectedRisk.threat}</strong></div>
-                  <div><span>Luas terdampak</span><strong>{selectedRisk.affected.toLocaleString("id-ID")}</strong><small>ha</small></div>
+                  <div><span>Luas terdampak</span><strong>{formatPresentationValue(selectedRisk.affected, "ha")}</strong></div>
                   <div><span>Kampung terdampak</span><strong>{selectedRisk.villages}</strong><small>kampung</small></div>
-                  <div><span>Status verifikasi</span><strong>{selectedRisk.score > 70 ? "Prioritas" : "Terpantau"}</strong></div>
+                  <div><span>Status data</span><strong>{selectedRisk.monitored ? "Terpantau" : "Belum dipantau"}</strong></div>
                 </div>
                 <div className="risk-recommendation"><span>REKOMENDASI</span><strong>{selectedRisk.recommendation}</strong></div>
-                <div className="district-progress-bar"><i style={{ width: `${selectedRisk.score}%`, background: riskColors[selectedRisk.level] }} /></div>
+                <div className="district-progress-bar"><i style={{ width: `${selectedRisk.percentage ?? 0}%`, background: riskColors[selectedRisk.level] }} /></div>
                 <small className="district-updated">Data simulasi risiko · {districtDummy.updated}</small>
               </>}
             </aside>
@@ -487,7 +494,7 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
                     className={active ? "geo-active" : "geo-disabled"}
                     onClick={() => {
                       if (suppressClickRef.current) { suppressClickRef.current = false; return; }
-                      if (level === "province" && isMerauke) { setStatus("loading"); setLevel("district"); setSelectedName(""); resetZoom(); }
+                      if (level === "province" && isMerauke) { setLevel("district"); setSelectedName(""); resetZoom(); }
                       if (level === "district") { setSelectedName(item.name); setDistrict(getRegionByName(item.name, "district")?.id ?? null); resetZoom(); }
                     }}
                     tabIndex={active ? 0 : -1}
@@ -495,11 +502,11 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
                     aria-label={level === "province" ? `${item.name}${active ? ", klik untuk melihat distrik" : ", belum aktif"}` : `Pilih Distrik ${item.name}`}
                     onKeyDown={event => {
                       if (event.key !== "Enter" && event.key !== " ") return;
-                      if (level === "province" && isMerauke) { setStatus("loading"); setLevel("district"); setSelectedName(""); resetZoom(); }
+                      if (level === "province" && isMerauke) { setLevel("district"); setSelectedName(""); resetZoom(); }
                       if (level === "district") { setSelectedName(item.name); setDistrict(getRegionByName(item.name, "district")?.id ?? null); resetZoom(); }
                     }}
                   >
-                    <path d={item.path} vectorEffect="non-scaling-stroke" style={active && layer !== "Luas Tanam" ? { fill: layerColor(layer, item.name, filters.seasonId, filters.snapshotId) } : undefined} />
+                    <path d={item.path} vectorEffect="non-scaling-stroke" style={active && layer !== "Luas Tanam" ? { fill: layerColor(layer, item.name, filters.seasonId) } : undefined} />
                     <text x={item.center[0]} y={item.center[1]} textAnchor="middle">
                       {item.name}
                     </text>
@@ -511,7 +518,7 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
             </svg>
           </>
         ) : null}
-        {!focusedDistrict && <div className="official-source"><span>◉</span><div><strong>Sumber geometri</strong><small>Badan Informasi Geospasial · WGS 84{sourceMode === "local" ? " · cadangan lokal" : ""}</small></div></div>}
+        {!focusedDistrict && <div className="official-source"><span>◉</span><div><strong>Sumber geometri</strong><small>Badan Informasi Geospasial · WGS 84{sourceMode === "fallback" ? " · cadangan lokal" : ""}</small></div></div>}
         {level === "province" ? (
           <div className="province-hint"><strong>Kabupaten Merauke aktif</strong><small>Klik wilayah berwarna untuk melihat pembagian distrik</small></div>
         ) : status === "ready" && !focusedDistrict ? (
@@ -553,11 +560,8 @@ function LandPage() {
     [],
   );
   const tableModel = useMemo(() => {
-    const areaNames = mapContext.level === "province"
-      ? ["Merauke"]
-      : mapContext.selectedName
-        ? makeVillageRows(mapContext.selectedName, filters.seasonId).map(row => row.cells[0])
-        : mapContext.districtNames;
+    const settlementNames = mapContext.selectedName ? makeVillageRows(mapContext.selectedName, filters.seasonId).map(row => row.cells[0]) : [];
+    const areaNames = resolveTableRegionNames(mapContext.level, mapContext.selectedName, canonicalDistrictNames, settlementNames);
     const areaLabel = mapContext.level === "province" ? "Kabupaten" : mapContext.selectedName ? "Kampung/Kelurahan" : "Distrik";
     const countLabel = mapContext.level === "province" ? "Jumlah Distrik" : mapContext.selectedName ? "Cakupan" : "Jumlah Kampung/Kelurahan";
     const scopeTitle = mapContext.level === "province"
@@ -568,17 +572,19 @@ function LandPage() {
       title: `REKAP FASE TANAM — ${scopeTitle}`,
       headers: [areaLabel, countLabel, "Luas Dalam Fase", "Fase Dominan", "Progres Fase", "Estimasi Panen", "Validasi"],
       rows: areaNames.map(name => {
-        const phase = phaseProfile(name, filters.seasonId, filters.snapshotId);
-        const seed = seededNumber(name);
+        const phase = phaseProfile(name, filters.seasonId);
         return {
           cells: [
             name,
             mapContext.selectedName ? "1 lokasi" : mapContext.level === "province" ? "22 distrik" : `${districtVillageCount(name)} kampung`,
-            `${phase.planted.toLocaleString("id-ID")} ha`,
+            formatPresentationValue(phase.planted, "ha"),
             phase.phase,
-            `${phase.progress}%`,
+            formatPresentationValue(phase.progress, "%"),
             phase.harvest,
-            `${72 + seed % 25}%`,
+            (() => {
+              const region = getRegionByName(name);
+              return region?.monitoring_status === "active" ? `${Math.round(aggregateRegion(region.id, filters.seasonId).validation_rate)}%` : "Belum dipantau";
+            })(),
           ],
           statusIndex: 3,
           validationIndex: 6,
@@ -589,16 +595,16 @@ function LandPage() {
       title: `REKAP TINGKAT RISIKO — ${scopeTitle}`,
       headers: [areaLabel, countLabel, "Ancaman Dominan", "Tingkat Risiko", "Luas Terdampak", "Rekomendasi", "Skor"],
       rows: areaNames.map(name => {
-        const risk = riskProfile(name, filters.seasonId, filters.snapshotId);
+        const risk = riskProfile(name, filters.seasonId);
         return {
           cells: [
             name,
             mapContext.selectedName ? "1 lokasi" : mapContext.level === "province" ? "22 distrik" : `${districtVillageCount(name)} kampung`,
             risk.threat,
             risk.level,
-            `${risk.affected.toLocaleString("id-ID")} ha`,
+            formatPresentationValue(risk.affected, "ha", risk.monitored ? undefined : "not_monitored"),
             risk.recommendation,
-            `${risk.score}%`,
+            formatPresentationValue(risk.score),
           ],
           statusIndex: 3,
           validationIndex: 6,
@@ -617,54 +623,33 @@ function LandPage() {
     };
     return {
       title: `DAFTAR KAMPUNG TERPANTAU — DISTRIK ${mapContext.selectedName.toUpperCase()}`,
-      headers: ["Kampung/Kelurahan", "Luas Lahan", "Luas Tanam", "Fase Tanam", "Produksi GKG", "Status", "Validasi"],
+      headers: ["Kampung/Kelurahan", "Luas lahan terpetakan", "Realisasi luas tanam", "Fase Tanam", "Produksi GKG", "Status", "Validasi"],
       rows: makeVillageRows(mapContext.selectedName, filters.seasonId),
     };
-  }, [filters.seasonId, filters.snapshotId, layer, mapContext]);
+  }, [filters.seasonId, layer, mapContext]);
   const insightModel = useMemo(() => {
-    if (mapContext.level === "province") return {
-      scope: "Kabupaten Merauke",
-      mapped: "48.920",
-      active: "42.680",
-      verified: 86,
-      coverage: `${activeRegionCounts.districts} distrik aktif · ${activeRegionCounts.settlements} kampung/kelurahan terpantau`,
-      good: 78,
-      watch: 16,
-      verify: 6,
-    };
-    if (!mapContext.selectedName) return {
-      scope: "Kabupaten Merauke",
-      mapped: "48.920",
-      active: "42.680",
-      verified: 86,
-      coverage: `${activeRegionCounts.districts} distrik aktif · ${activeRegionCounts.settlements} kampung/kelurahan terpantau`,
-      good: 78,
-      watch: 16,
-      verify: 6,
-    };
-    const seed = seededNumber(mapContext.selectedName);
-    const verified = 71 + seed % 24;
-    const watch = 8 + seed % 13;
-    const verify = Math.max(3, 100 - verified - watch);
-    const good = 100 - watch - verify;
+    const region = mapContext.selectedName ? getRegionByName(mapContext.selectedName, "district") : getRegionById("93.01");
+    const aggregate = aggregateRegion(region?.id ?? "93.01", filters.seasonId);
+    const risk = riskProfile(mapContext.selectedName || "Kabupaten Merauke", filters.seasonId, region?.id ?? "93.01");
     return {
-      scope: `Distrik ${mapContext.selectedName}`,
-      mapped: (1600 + seed % 3900).toLocaleString("id-ID"),
-      active: (1200 + seed % 3100).toLocaleString("id-ID"),
-      verified,
-      coverage: `${districtVillageCount(mapContext.selectedName)} kampung/kelurahan terpantau`,
-      good,
-      watch,
-      verify,
+      scope: mapContext.selectedName ? `Distrik ${mapContext.selectedName}` : "Kabupaten Merauke",
+      mapped: Math.round(aggregate.mapped_land_ha).toLocaleString("id-ID"),
+      active: Math.round(aggregate.active_land_ha).toLocaleString("id-ID"),
+      verified: Math.round(aggregate.validation_rate),
+      coverage: mapContext.selectedName
+        ? `${risk.villages} kampung/kelurahan terpantau`
+        : `${activeRegionCounts.districts} distrik aktif · ${activeRegionCounts.settlements} kampung/kelurahan terpantau`,
+      risk,
     };
-  }, [mapContext]);
+  }, [filters.seasonId, mapContext]);
   const analyticalInsight = useMemo(() => {
     const scope = mapContext.selectedName ? `Distrik ${mapContext.selectedName}` : "Kabupaten Merauke";
-    const key = mapContext.selectedName || "Merauke";
-    const phase = phaseProfile(key, filters.seasonId, filters.snapshotId);
-    const risk = riskProfile(key, filters.seasonId, filters.snapshotId);
+    const key = mapContext.selectedName || "Kabupaten Merauke";
+    const regionId = mapContext.selectedName ? profileRegionId(mapContext.selectedName) : "93.01";
+    const phase = phaseProfile(key, filters.seasonId, regionId);
+    const risk = riskProfile(key, filters.seasonId, regionId);
     return { scope, phase, risk };
-  }, [filters.seasonId, filters.snapshotId, mapContext]);
+  }, [filters.seasonId, mapContext]);
   const entityLabel = mapContext.level === "province"
     ? "Kabupaten"
     : mapContext.selectedName
@@ -701,20 +686,26 @@ function LandPage() {
   const totalModel = useMemo(() => {
     const average = (index: number) => filtered.length ? Math.round(filtered.reduce((sum, row) => sum + numericValue(row.cells[index]), 0) / filtered.length) : 0;
     const sum = (index: number) => filtered.reduce((total, row) => total + numericValue(row.cells[index]), 0).toLocaleString("id-ID");
+    const validationSummary = getValidationSummary(filtered.map(row => ({
+      monitoringStatus: /^\d/.test(row.cells[row.validationIndex]) ? "active" : "not_monitored",
+      validation: /^\d/.test(row.cells[row.validationIndex]) ? numericValue(row.cells[row.validationIndex]) : null,
+    })));
+    const validationValue = validationSummary.averageValidation === null ? "Belum tersedia" : `${validationSummary.averageValidation.toLocaleString("id-ID")}%`;
     if (layer === "Fase Tanam") return [
       [`${entityLabel} ditampilkan`, `${filtered.length}`],
       ["Luas dalam fase", `${sum(2)} ha`],
       ["Rata-rata progres", `${average(4)}%`],
-      ["Rata-rata validasi", `${average(6)}%`],
+      ["Rata-rata validasi", validationValue],
+      ["Cakupan validasi", validationSummary.calculationScope],
     ];
     if (layer === "Tingkat Risiko") {
       const dominant = filtered.length
-        ? Array.from(new Set(filtered.map(row => row.cells[3]))).sort((a, b) => filtered.filter(row => row.cells[3] === b).length - filtered.filter(row => row.cells[3] === a).length)[0]
+        ? Array.from(new Set(filtered.map(row => row.cells[3]))).sort((a, b) => filtered.filter(row => row.cells[3] === b).reduce((sum, row) => sum + numericValue(row.cells[4]), 0) - filtered.filter(row => row.cells[3] === a).reduce((sum, row) => sum + numericValue(row.cells[4]), 0))[0]
         : "—";
       return [
         [`${entityLabel} ditampilkan`, `${filtered.length}`],
         ["Luas terdampak", `${sum(4)} ha`],
-        ["Rata-rata skor", `${average(6)}%`],
+        ["Rata-rata skor risiko", "Belum tersedia"],
         ["Risiko dominan", dominant],
       ];
     }
@@ -723,14 +714,16 @@ function LandPage() {
       ["Total luas tanam", `${sum(2)} ha`],
       ["Total luas panen", `${sum(3)} ha`],
       ["Total produksi GKG", `${sum(4)} ton`],
-      ["Rata-rata validasi", `${average(6)}%`],
+      ["Rata-rata validasi", validationValue],
+      ["Cakupan validasi", validationSummary.calculationScope],
     ];
     return [
       [`${entityLabel} ditampilkan`, `${filtered.length}`],
-      ["Total luas lahan", `${sum(1)} ha`],
-      ["Total luas tanam", `${sum(2)} ha`],
+      ["Total luas lahan terpetakan", `${sum(1)} ha`],
+      ["Total realisasi luas tanam", `${sum(2)} ha`],
       ["Total produksi GKG", `${sum(4)} ton`],
-      ["Rata-rata validasi", `${average(6)}%`],
+      ["Rata-rata validasi", validationValue],
+      ["Cakupan validasi", validationSummary.calculationScope],
     ];
   }, [filtered, layer, entityLabel, mapContext.selectedName]);
   const detailModel = useMemo(() => {
@@ -738,7 +731,7 @@ function LandPage() {
     const name = detailRow.cells[0];
     const status = detailRow.cells[detailRow.statusIndex];
     if (layer === "Fase Tanam") {
-      const profile = phaseProfile(name, filters.seasonId, filters.snapshotId);
+      const profile = phaseProfile(name, filters.seasonId);
       return {
         eyebrow: "DETAIL FASE TANAM",
         name,
@@ -750,13 +743,13 @@ function LandPage() {
       };
     }
     if (layer === "Tingkat Risiko") {
-      const profile = riskProfile(name, filters.seasonId, filters.snapshotId);
+      const profile = riskProfile(name, filters.seasonId);
       return {
         eyebrow: "DETAIL TINGKAT RISIKO",
         name,
         status,
         color: riskColors[status],
-        description: `${name} memiliki tingkat risiko ${status} dengan komposisi dominan ${profile.score}% pada data musim terpilih.`,
+        description: `${name} memiliki tingkat risiko dominan ${status}${profile.percentage === null ? "" : ` sebesar ${profile.percentage.toLocaleString("id-ID")}% dari luas risiko terpantau`} pada data musim terpilih.`,
         reason: "Kategori berasal dari agregasi field risiko pada record monitoring yang terverifikasi.",
         recommendation: profile.recommendation,
       };
@@ -777,7 +770,7 @@ function LandPage() {
       reason: reasonByStatus[status] ?? `Status ${status} ditetapkan berdasarkan hasil pemantauan dan validasi data lapangan.`,
       recommendation: status === "Baik" || status === "Aktif" ? "Pertahankan pola pemeliharaan dan pembaruan data berkala." : status === "Waspada" ? "Lakukan pemantauan lebih sering dan tindak lanjuti indikator gangguan." : "Lakukan verifikasi lapangan dan perbarui data pendukung.",
     };
-  }, [detailRow, filters.seasonId, filters.snapshotId, layer]);
+  }, [detailRow, filters.seasonId, layer]);
   useEffect(() => {
     if (!detailRow) return;
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -839,15 +832,15 @@ function LandPage() {
           {layer === "Luas Tanam" ? <>
           <article className="card mini-stat"><span>LUAS LAHAN TERPETAKAN</span><small className="insight-scope">{insightModel.scope}</small><strong>{insightModel.mapped} <small>ha</small></strong><em>↑ {insightModel.verified}% telah diverifikasi</em></article>
           <article className="card mini-stat"><span>LAHAN AKTIF MT II</span><small className="insight-scope">{insightModel.scope}</small><strong>{insightModel.active} <small>ha</small></strong><em>{insightModel.coverage}</em></article>
-          <article className="card condition-card"><div className="card-title"><div>KONDISI LAHAN</div><span>{insightModel.scope}</span></div><div><span>Baik <b>{insightModel.good}%</b></span><i><em style={{width:`${insightModel.good}%`}} /></i><span>Waspada <b>{insightModel.watch}%</b></span><i><em className="amber-bar" style={{width:`${insightModel.watch}%`}} /></i><span>Perlu verifikasi <b>{insightModel.verify}%</b></span><i><em className="red-bar" style={{width:`${insightModel.verify}%`}} /></i></div></article>
+          <article className="card condition-card"><div className="card-title"><div>KOMPOSISI RISIKO</div><span>{insightModel.scope}</span></div><div>{insightModel.risk.monitored ? riskLevels.map(label => { const item = insightModel.risk.items.find(entry => entry.label === label); const area = item?.area ?? 0; const percentage = insightModel.risk.total ? area / insightModel.risk.total * 100 : 0; return <div className="composition-row" key={label}><span>{label} <b>{area.toLocaleString("id-ID")} ha · {percentage.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%</b></span><i><em style={{width:`${percentage}%`,background:riskColors[label]}} /></i></div>; }) : <span>{insightModel.risk.level}</span>}</div></article>
           </> : layer === "Fase Tanam" ? <>
-            <article className="card mini-stat"><span>FASE TANAM DOMINAN</span><small className="insight-scope">{analyticalInsight.scope}</small><strong className="textual-stat" style={{color:phaseColors[analyticalInsight.phase.phase]}}>{analyticalInsight.phase.phase}</strong><em>Progres fase {analyticalInsight.phase.progress}%</em></article>
+            <article className="card mini-stat"><span>FASE TANAM DOMINAN</span><small className="insight-scope">{analyticalInsight.scope}</small><strong className="textual-stat" style={{color:phaseColors[analyticalInsight.phase.phase]}}>{analyticalInsight.phase.phase}</strong><em>{analyticalInsight.phase.progress === null ? "Belum tersedia" : `Progres fase ${analyticalInsight.phase.progress.toLocaleString("id-ID")}%`}</em></article>
             <article className="card mini-stat"><span>LUAS SIAP PANEN</span><small className="insight-scope">{analyticalInsight.scope}</small><strong>{analyticalInsight.phase.ready.toLocaleString("id-ID")} <small>ha</small></strong><em>Estimasi {analyticalInsight.phase.harvest}</em></article>
-            <article className="card condition-card"><div className="card-title"><div>KOMPOSISI FASE</div><span>{analyticalInsight.scope}</span></div><div><span>Vegetatif <b>42%</b></span><i><em style={{width:"42%",background:phaseColors.Vegetatif}} /></i><span>Generatif <b>34%</b></span><i><em style={{width:"34%",background:phaseColors.Generatif}} /></i><span>Siap panen <b>24%</b></span><i><em style={{width:"24%",background:phaseColors["Siap Panen"]}} /></i></div></article>
+            <article className="card condition-card"><div className="card-title"><div>KOMPOSISI FASE</div><span>{analyticalInsight.scope}</span></div><div>{analyticalInsight.phase.items.map(item => { const percentage = analyticalInsight.phase.total ? (item.area ?? 0) / analyticalInsight.phase.total * 100 : 0; return <div className="composition-row" key={item.id}><span>{item.label} <b>{percentage.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%</b></span><i><em style={{width:`${percentage}%`,background:item.color}} /></i></div>; })}</div></article>
           </> : <>
-            <article className="card mini-stat"><span>LUAS WILAYAH BERISIKO</span><small className="insight-scope">{analyticalInsight.scope}</small><strong>{analyticalInsight.risk.affected.toLocaleString("id-ID")} <small>ha</small></strong><em>{analyticalInsight.risk.threat}</em></article>
+            <article className="card mini-stat"><span>LUAS TERDAMPAK RISIKO DOMINAN</span><small className="insight-scope">{analyticalInsight.scope}</small><strong>{formatPresentationValue(analyticalInsight.risk.affected, "ha")}</strong><em>{analyticalInsight.risk.threat}</em></article>
             <article className="card mini-stat"><span>TINGKAT RISIKO DOMINAN</span><small className="insight-scope">{analyticalInsight.scope}</small><strong className="textual-stat" style={{color:riskColors[analyticalInsight.risk.level]}}>{analyticalInsight.risk.level}</strong><em>{analyticalInsight.risk.villages} wilayah terdampak</em></article>
-            <article className="card condition-card"><div className="card-title"><div>KOMPOSISI RISIKO</div><span>{analyticalInsight.scope}</span></div><div><span>Rendah <b>54%</b></span><i><em style={{width:"54%",background:riskColors.Rendah}} /></i><span>Waspada <b>29%</b></span><i><em style={{width:"29%",background:riskColors.Waspada}} /></i><span>Tinggi/Kritis <b>17%</b></span><i><em style={{width:"17%",background:riskColors["Tinggi/Kritis"]}} /></i></div></article>
+            <article className="card condition-card"><div className="card-title"><div>KOMPOSISI RISIKO</div><span>{analyticalInsight.scope}</span></div><div>{analyticalInsight.risk.items.map(item => { const percentage = analyticalInsight.risk.total ? (item.area ?? 0) / analyticalInsight.risk.total * 100 : 0; return <div className="composition-row" key={item.id}><span>{item.label} <b>{percentage.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%</b></span><i><em style={{width:`${percentage}%`,background:item.color}} /></i></div>; })}</div></article>
           </>}
         </aside>
       </section>
@@ -861,7 +854,7 @@ function LandPage() {
         </div>
         <div className="table-scroll"><table><thead><tr>{tableModel.headers.map(header => <th key={header}>{header}</th>)}<th>Detail</th></tr></thead><tbody>{!visibleRows.length && <tr><td colSpan={tableModel.headers.length + 1}>Tidak ada data sesuai filter.<small>Ubah pencarian atau filter untuk melihat data lainnya.</small></td></tr>}{visibleRows.map((row, rowIndex) => <tr key={`${row.cells[0]}-${rowIndex}`}>{row.cells.map((cell,i) => {
           const indicatorColor = layer === "Fase Tanam" ? phaseColors[cell] : layer === "Tingkat Risiko" ? riskColors[cell] : undefined;
-          return <td key={i}>{i === row.statusIndex ? <span className={`status ${indicatorColor ? "layer-status" : cell !== "Baik" && cell !== "Aktif" ? "warn" : ""}`} style={indicatorColor ? { color: indicatorColor, borderColor: `${indicatorColor}55`, background: `${indicatorColor}18` } : undefined}>{cell}</span> : i === row.validationIndex ? <span className="validation"><i style={{width:cell}} />{cell}</span> : cell}</td>;
+          return <td key={i}>{i === row.statusIndex ? <span className={`status ${indicatorColor ? "layer-status" : cell !== "Baik" && cell !== "Aktif" ? "warn" : ""}`} style={indicatorColor ? { color: indicatorColor, borderColor: `${indicatorColor}55`, background: `${indicatorColor}18` } : undefined}>{cell}</span> : i === row.validationIndex && /^\d/.test(cell) ? <span className="validation"><i style={{width:cell}} />{cell}</span> : cell}</td>;
         })}<td><button className="detail-button" aria-label={`Buka detail ${row.cells[0]}`} onClick={() => setDetailRow(row)}>Lihat selengkapnya</button></td></tr>)}</tbody></table></div>
         <div className="table-total">
           <div><strong>TOTAL HASIL</strong><small>Berdasarkan data yang sedang ditampilkan</small></div>

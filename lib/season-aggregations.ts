@@ -69,7 +69,7 @@ export function monitoringRows(names: string[], scopeKey: string, seasonId = "MT
   });
 }
 
-export function phaseComposition(scopeKey: string, _monthIndex: number, seasonId = "MT2-2026") {
+export function phaseComposition(scopeKey: string, seasonId = "MT2-2026") {
   const scope = getRegionById(scopeKey);
   const records = seasonRecords.filter((record) => {
     if (record.season_id !== seasonId || record.validation_status !== "approved") return false;

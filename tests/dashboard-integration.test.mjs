@@ -42,6 +42,8 @@ const regions=${JSON.stringify(regions)};
 const seasonRecords=${JSON.stringify(seasons.records)};
 const getRegionById=id=>regions.find(row=>row.id===id)||null;
 const getChildrenByRegionId=id=>regions.filter(row=>row.parent_id===id);
+const getDominantPhase=items=>{const available=items.filter(item=>typeof item.area==="number");if(!available.length)return {phaseId:null,label:items.some(item=>item.monitoringStatus==="not_monitored")?"Belum dipantau":"Belum tersedia",areaHa:null,percentage:null,color:null,monitoringStatus:"not_available"};const total=available.reduce((sum,item)=>sum+item.area,0);const item=available.reduce((best,item)=>item.area>best.area?item:best);return {phaseId:item.id,label:item.label,areaHa:item.area,percentage:total?Math.round(item.area/total*1000)/10:0,color:item.color,monitoringStatus:"available"}};
+const getDominantRisk=(items,count=0)=>{const phase=getDominantPhase(items);return {riskLevel:phase.phaseId,label:phase.label,affectedAreaHa:phase.areaHa,percentage:phase.percentage,color:phase.color,monitoredLocationCount:count,monitoringStatus:phase.monitoringStatus}};
 `;
 const mapModule = await loadTsModule("lib/map-monitoring.ts", mapPreamble);
 const insightModule = await loadTsModule("lib/system-insights.ts");
@@ -165,13 +167,24 @@ test("chart builder executes actual/projection and tooltip labels per season", (
 
 test("phase and risk selectors execute season-scoped 100 percent composition", () => {
   for (const selector of [mapModule.selectPhaseMonitoring, mapModule.selectRiskMonitoring]) {
-    const mt1 = selector("MT1-2026", "93.01.14", "MT1-2026:2026-03");
-    const mt2 = selector("MT2-2026", "93.01.14", "MT2-2026:2026-07");
+    const mt1 = selector("MT1-2026", "93.01.05");
+    const mt2 = selector("MT2-2026", "93.01.05");
     assert.equal(mt1.seasonId, "MT1-2026");
     assert.equal(mt2.seasonId, "MT2-2026");
     assert.equal(Number(Object.values(mt1.composition).reduce((a, b) => a + b, 0).toFixed(8)), 100);
     assert.equal(Number(Object.values(mt2.composition).reduce((a, b) => a + b, 0).toFixed(8)), 100);
   }
+});
+
+test("Semangga MT II risk is canonical and composition selectors are season-level", () => {
+  const risk = mapModule.selectRiskMonitoring("MT2-2026", "93.01.05");
+  assert.equal(mapModule.selectRiskMonitoring.length, 2);
+  assert.equal(mapModule.selectPhaseMonitoring.length, 2);
+  assert.equal("snapshotId" in risk, false);
+  assert.equal(risk.dominantDetail.label, "Tinggi/Kritis");
+  assert.equal(risk.dominantDetail.affectedAreaHa, 1902);
+  assert.equal(risk.dominantDetail.percentage, 32.7);
+  assert.equal(risk.total, 5822);
 });
 
 test("breadcrumb reducer executes parent resets", () => {

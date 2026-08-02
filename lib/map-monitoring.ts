@@ -1,4 +1,5 @@
 import { getChildrenByRegionId, getRegionById, seasonRecords } from "@/lib/data-foundation";
+import { getDominantPhase, getDominantRisk, type CompositionItem, type DominantPhase, type DominantRisk } from "@/lib/presentation-selectors";
 
 export const phaseColors: Record<string, string> = {
   Persiapan: "#4b8fa8",
@@ -31,22 +32,24 @@ function descendantIds(regionId: string): Set<string> {
 export type MonitoringComposition = {
   seasonId: string;
   regionId: string;
-  snapshotId: string | null;
   monitored: boolean;
   dominant: string;
   composition: Record<string, number>;
   total: number;
+  items: CompositionItem[];
+  dominantDetail: DominantPhase | DominantRisk;
+  monitoredLocationCount: number;
 };
 
 function selectComposition(
   seasonId: string,
   regionId: string,
-  snapshotId: string | null,
   field: "phase" | "risk",
 ): MonitoringComposition {
   const region = getRegionById(regionId);
   if (!region || region.monitoring_status === "not_monitored") {
-    return { seasonId, regionId, snapshotId, monitored: false, dominant: "Belum dipantau", composition: {}, total: 0 };
+    const items: CompositionItem[] = [{ id: "not-monitored", label: "Belum dipantau", area: null, color: "#aab7b0", monitoringStatus: "not_monitored" }];
+    return { seasonId, regionId, monitored: false, dominant: "Belum dipantau", composition: {}, total: 0, items, dominantDetail: field === "phase" ? getDominantPhase(items) : getDominantRisk(items), monitoredLocationCount: 0 };
   }
   const ids = descendantIds(regionId);
   const rows = seasonRecords.filter(row =>
@@ -61,16 +64,19 @@ function selectComposition(
   }
   const total = Object.values(weights).reduce((sum, value) => sum + value, 0);
   const composition = Object.fromEntries(Object.entries(weights).map(([key, value]) => [key, total ? value / total * 100 : 0]));
-  const dominant = Object.entries(weights).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Belum dipantau";
-  return { seasonId, regionId, snapshotId, monitored: rows.length > 0, dominant, composition, total };
+  const colors = field === "phase" ? phaseColors : riskColors;
+  const items = Object.entries(weights).map(([key, area]) => ({ id: key, label: key, area, color: colors[key] ?? "#aab7b0", monitoringStatus: "active" as const }));
+  const monitoredLocationCount = new Set(rows.map(row => row.region_id)).size;
+  const dominantDetail = field === "phase" ? getDominantPhase(items) : getDominantRisk(items, monitoredLocationCount);
+  return { seasonId, regionId, monitored: rows.length > 0, dominant: dominantDetail.label, composition, total, items, dominantDetail, monitoredLocationCount };
 }
 
-export function selectPhaseMonitoring(seasonId: string, regionId: string, snapshotId: string | null) {
-  return selectComposition(seasonId, regionId, snapshotId, "phase");
+export function selectPhaseMonitoring(seasonId: string, regionId: string) {
+  return selectComposition(seasonId, regionId, "phase") as MonitoringComposition & { dominantDetail: DominantPhase };
 }
 
-export function selectRiskMonitoring(seasonId: string, regionId: string, snapshotId: string | null) {
-  return selectComposition(seasonId, regionId, snapshotId, "risk");
+export function selectRiskMonitoring(seasonId: string, regionId: string) {
+  return selectComposition(seasonId, regionId, "risk") as MonitoringComposition & { dominantDetail: DominantRisk };
 }
 
 export type MapBreadcrumbTarget = "province" | "regency" | "district";

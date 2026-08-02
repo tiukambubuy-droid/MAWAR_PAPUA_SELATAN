@@ -208,6 +208,7 @@ footer{display:flex;justify-content:space-between;gap:20px;padding:13px 2px 0;fo
 .mini-stat em{font-size:10px}
 .condition-card>.card-title{height:48px;padding-inline:16px;font-size:11px}
 .condition-card>div:last-child{padding:16px;gap:10px}
+.condition-card .composition-row{display:contents}
 .condition-card span{font-size:10px}
 .data-table-card>.card-title{height:48px;padding-inline:17px;font-size:11px}
 .data-table-card>.card-title>span{font-size:9px}

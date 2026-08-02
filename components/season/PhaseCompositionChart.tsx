@@ -1,30 +1,25 @@
 import { phasePalette } from "@/lib/season-aggregations";
 import { formatNumber, formatPercent } from "@/lib/season-formatters";
 import type { PlantingPhase } from "@/types/planting-season";
+import { getDominantPhase } from "@/lib/presentation-selectors";
 
-export function PhaseCompositionChart({ values, previousValues, total, label, validation, previousLabel }: {
+export function PhaseCompositionChart({ values, total, label, validation }: {
   values: { phase: PlantingPhase; value: number }[];
-  previousValues: { phase: PlantingPhase; value: number }[];
   total: number;
   label: string;
   validation: number;
-  previousLabel?: string;
 }) {
   const gradient = values.map((item, index) => {
     const start = values.slice(0, index).reduce((sum, value) => sum + value.value, 0);
     return `${phasePalette[item.phase]} ${start}% ${start + item.value}%`;
   }).join(",");
   const enriched = values.map(item => ({ ...item, area: Math.round(total * item.value / 100) }));
-  const dominant = enriched.reduce((best, item) => item.value > best.value ? item : best, enriched[0]);
+  const dominantDetail = getDominantPhase(enriched.map(item => ({ id: item.phase, label: item.phase, area: item.area, color: phasePalette[item.phase], monitoringStatus: "active" })));
+  const dominant = enriched.find(item => item.phase === dominantDetail.phaseId) ?? enriched[0];
   const ripening = enriched.find(item => item.phase === "Pematangan");
   const ready = enriched.find(item => item.phase === "Siap Panen");
   const harvestArea = (ripening?.area ?? 0) + (ready?.area ?? 0);
   const harvestPercent = (ripening?.value ?? 0) + (ready?.value ?? 0);
-  const previousDominant = previousValues.find(item => item.phase === dominant.phase)?.value ?? dominant.value;
-  const monthlyDelta = dominant.value - previousDominant;
-  const monthlyChange = Math.abs(monthlyDelta).toLocaleString("id-ID", { maximumFractionDigits: 1 });
-  const monthlyDirection = monthlyDelta > 0 ? "naik" : monthlyDelta < 0 ? "turun" : "tetap";
-  const directionIcon = monthlyDelta > 0 ? "↗" : monthlyDelta < 0 ? "↘" : "→";
   const aria = `Komposisi fase tanaman ${label}. Total luas dipantau ${formatNumber(total)} hektare. ${enriched.map(item => `${item.phase} ${item.value} persen`).join(", ")}.`;
 
   return <article className="card phase-composition">
@@ -59,8 +54,8 @@ export function PhaseCompositionChart({ values, previousValues, total, label, va
           <div><span>MENUJU PANEN</span><strong>{formatNumber(harvestArea)} ha</strong><small>{formatPercent(harvestPercent)} dari luas dipantau</small></div>
         </div>
         <div className="phase-insight">
-          <i className="change" aria-hidden="true">↗</i>
-          <div><span>PERUBAHAN BULANAN</span><strong>{dominant.phase} {monthlyDirection} {monthlyChange}% <b>{directionIcon}</b></strong><small>{previousLabel ? `dibanding ${previousLabel}` : "bulan awal pemantauan"}</small></div>
+          <i className="change" aria-hidden="true">ⓘ</i>
+          <div><span>PERBANDINGAN BULANAN</span><strong>Data pembanding komposisi bulan sebelumnya belum tersedia pada data prototipe.</strong><small>Komposisi yang tampil merupakan data terbaru musim aktif.</small></div>
         </div>
       </aside>
     </div>
