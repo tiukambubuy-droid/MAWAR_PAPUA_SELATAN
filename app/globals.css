@@ -291,3 +291,73 @@ footer{display:flex;justify-content:space-between;gap:20px;padding:13px 2px 0;fo
 @media (max-width: 620px) {.season-heading h1{font-size:22px}.season-command-bar{grid-template-columns:1fr}.season-filter-pair,.season-filter-pair.three{grid-template-columns:1fr}.season-context{width:100%}.season-kpi-grid{grid-template-columns:1fr 1fr}.phase-composition-layout{grid-template-columns:1fr;padding:12px}.phase-chart-panel{padding:2px 0 15px}.phase-donut-large{width:190px;height:190px}.phase-legend-panel{padding:13px 4px 0;border-top:1px solid #e7ede9}.phase-table-head,.phase-list>div{grid-template-columns:minmax(115px,1fr) minmax(95px,.8fr) 58px;gap:7px}.phase-insight-panel{grid-template-columns:1fr;padding-top:8px}.phase-insight{border-right:0;border-bottom:1px solid #e7ede9;padding:3px 4px}.phase-insight:last-child{border-bottom:0}.manage-form{grid-template-columns:1fr}.season-table-tools{flex-direction:column}.season-table-tools input,.season-table-tools select{width:100%}}
 @media print {.sidebar,.topbar,.filters,.download,.profile{display:none!important}.workspace{margin:0}.content{padding:12px}.map-stage{height:330px}}
 @media (prefers-reduced-motion: reduce) {*{animation:none!important;transition:none!important}}
+
+/* TASK 006: shared map and monitoring-chart presentation primitives. */
+.real-map-canvas{height:clamp(430px,48vw,580px)}
+.real-map-canvas>svg{inset:14px 3% 10px;width:94%;height:calc(100% - 24px);overflow:hidden}
+.map-zoom-controls{gap:5px;padding:5px}
+.map-zoom-controls button{width:40px;height:40px;min-width:40px;font-size:18px;cursor:pointer}
+.map-zoom-controls .zoom-reset{width:auto;min-width:58px;font-size:10px}
+.geo-layer path{stroke-width:1.25;transition:filter var(--motion-fast,180ms) ease,opacity var(--motion-fast,180ms) ease}
+.geo-layer text,.executive-big-layer text{paint-order:stroke;stroke:#f7fbf8;stroke-width:3px;stroke-linejoin:round;fill:#173f32;font-weight:800;pointer-events:none}
+.geo-layer text{font-size:11px}
+.geo-layer .geo-disabled text{fill:#5f7069}
+.geo-layer g:focus-visible path,.executive-big-layer g:focus-visible path{stroke:#063f31;stroke-width:2.5;filter:brightness(.92)}
+.executive-map-stage{height:360px}
+.executive-map-stage>svg{width:96%;height:94%;inset:3% 2%;filter:drop-shadow(0 8px 9px #164c3628)}
+.executive-map-stage text{font-size:10px}
+.executive-big-layer path{cursor:pointer;transition:filter var(--motion-fast,180ms) ease;stroke:#fff;stroke-width:1.2}
+.executive-big-layer g:hover path,.executive-big-layer g.selected path{filter:brightness(.88);stroke:#075a3e;stroke-width:2}
+
+.monitoring-chart{min-height:350px;display:flex;flex-direction:column;padding:10px 14px 4px;box-sizing:border-box}
+.monitoring-chart-legend{display:flex;align-items:center;flex-wrap:wrap;gap:10px 22px;min-height:34px;color:#51675e;font-size:10px}
+.monitoring-chart-legend span{display:inline-flex;align-items:center;gap:7px}
+.monitoring-chart-legend i{display:inline-block;width:28px;border-top:3px solid}
+.monitoring-chart-legend .target i{border-color:#65746e;border-top-style:dashed}
+.monitoring-chart-legend .actual i{border-color:#087f58}
+.monitoring-chart-legend .projection i{border-color:#33ad7d;border-top-style:dashed}
+.monitoring-chart-legend em{margin-left:auto;font-size:9px;font-style:normal;color:#75867e}
+.monitoring-chart-stage{position:relative;flex:1;min-height:292px}
+.monitoring-chart-stage svg{display:block;width:100%!important;height:100%!important;min-height:292px;padding:0!important;overflow:visible}
+.chart-axis-row line{stroke:#dde7e2;stroke-width:1}
+.chart-axis-row text,.chart-x-label{fill:#65776f;font-size:11px}
+.chart-series{fill:none;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;animation:chartReveal var(--motion-slow,420ms) ease both}
+.chart-series.target{stroke:#65746e;stroke-width:2;stroke-dasharray:8 6}
+.chart-series.actual{stroke:#087f58;stroke-width:4}
+.chart-series.projection{stroke:#33ad7d;stroke-width:3;stroke-dasharray:7 6}
+.chart-point{vector-effect:non-scaling-stroke;stroke:#fff;stroke-width:2;cursor:pointer;outline:none}
+.chart-point.actual{fill:#087f58}.chart-point.projection{fill:#fff;stroke:#33ad7d;stroke-width:3}
+.chart-point:focus{stroke:#173f32;stroke-width:3}
+.chart-cutoff line{stroke:#7cae9a;stroke-width:1.5;stroke-dasharray:4 4}
+.chart-cutoff text{fill:#39705d;font-size:10px;font-weight:800}
+.chart-value-label{font-size:10px;font-weight:800;pointer-events:none}
+.chart-value-label rect{fill:#fffffff2;stroke-width:1.2;vector-effect:non-scaling-stroke}
+.chart-value-label text{stroke:none}.chart-value-label.target{fill:#52615b}.chart-value-label.target rect{stroke:#65746e}
+.chart-value-label.actual{fill:#076c4c}.chart-value-label.actual rect{stroke:#087f58}
+.chart-value-label.projection{fill:#22815f}.chart-value-label.projection rect{stroke:#33ad7d}
+.monitoring-chart-tooltip{position:absolute;z-index:3;width:154px;pointer-events:none;transform:translate(12px,-50%);border-radius:9px;background:#064a38f2;color:#fff;padding:10px 11px;box-shadow:0 8px 22px #123f312b;display:flex;flex-direction:column;gap:5px;font-size:9px}
+.monitoring-chart-tooltip.align-left{transform:translate(calc(-100% - 12px),-50%)}
+.monitoring-chart-tooltip.tooltip-corner-left{left:4px;right:auto;top:7px;transform:none}
+.monitoring-chart-tooltip.tooltip-corner-right{left:auto;right:4px;top:7px;transform:none}
+.monitoring-chart-tooltip strong{font-size:11px}.monitoring-chart-tooltip span{display:flex;justify-content:space-between;gap:8px;color:#cbe9dd}.monitoring-chart-tooltip b{color:#fff;white-space:nowrap}.monitoring-chart-tooltip em{font-style:normal;color:#f3cf69;font-weight:800}
+.monitoring-chart-empty{min-height:320px;display:grid;place-items:center;color:#71827a;font-size:11px}
+.executive-chart{min-height:410px}.executive-chart .monitoring-chart{min-height:360px}
+.production-trend .monitoring-chart,.season-line-card .monitoring-chart{min-height:390px}
+@keyframes chartReveal{from{opacity:0;stroke-dashoffset:22}to{opacity:1;stroke-dashoffset:0}}
+
+@media(max-width:760px){
+  .real-map-canvas{height:430px}
+  .map-zoom-controls{top:10px;right:10px}
+  .executive-map-stage{height:420px}
+  .monitoring-chart{min-height:325px;padding-inline:8px}
+  .monitoring-chart-stage{min-height:255px}
+  .monitoring-chart-stage svg{min-height:255px}
+  .monitoring-chart-tooltip{width:138px;padding:8px;font-size:8px}
+}
+@media(max-width:430px){
+  .monitoring-chart-legend{gap:8px 12px}.monitoring-chart-legend em{width:100%;margin:0}
+  .chart-x-label.mobile-secondary{display:none}
+  .chart-axis-row text,.chart-x-label{font-size:12px}
+  .geo-layer text,.executive-big-layer text{font-size:12px}
+  .monitoring-chart-tooltip,.monitoring-chart-tooltip.align-left{left:auto!important;right:4px;top:7px!important;transform:none}
+}

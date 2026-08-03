@@ -20,6 +20,7 @@ import {
 import { createBigMapRequestController, createBigMapViewCallbacks, reduceBigMapViewState, type BigMapRequestController, type BigMapViewState } from "@/lib/big-map-request-controller";
 import { phaseColors, reduceMapBreadcrumb, riskColors, selectPhaseMonitoring, selectRiskMonitoring } from "@/lib/map-monitoring";
 import { defineLandMetric, formatPresentationValue, getValidationSummary, resolveTableRegionNames } from "@/lib/presentation-selectors";
+import { clampPan, clampZoom, fitToBounds, isMapDrag, prioritizedMapLabels, resetMapCamera } from "@/lib/visualization";
 
 const activeRegionCounts = getActiveMonitoringRegionCounts();
 const canonicalDistrictNames = regions
@@ -224,14 +225,13 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
   const requestControllerRef = useRef<BigMapRequestController<GeoFeature> | null>(null);
   const slowTimerRef = useRef(0);
 
-  const zoomIn = () => setMapZoom(value => Math.min(3, Number((value + 0.25).toFixed(2))));
+  const zoomIn = () => setMapZoom(value => clampZoom(Number((value + 0.25).toFixed(2))));
   const zoomOut = () => setMapZoom(value => {
-    const next = Math.max(1, Number((value - 0.25).toFixed(2)));
+    const next = clampZoom(Number((value - 0.25).toFixed(2)));
     if (next === 1) setMapPan({ x: 0, y: 0 });
     return next;
   });
-  const resetZoom = () => { setMapZoom(1); setMapPan({ x: 0, y: 0 }); };
-  const panLimit = 250 * (mapZoom - 1);
+  const resetZoom = () => { const camera = resetMapCamera(); setMapZoom(camera.zoom); setMapPan({ x: camera.pan[0], y: camera.pan[1] }); };
   const startPan = (event: ReactPointerEvent<SVGSVGElement>) => {
     if (mapZoom === 1) return;
     dragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, originX: mapPan.x, originY: mapPan.y, moved: false };
@@ -240,17 +240,15 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
     if (dragRef.current.pointerId !== event.pointerId) return;
     const dx = event.clientX - dragRef.current.x;
     const dy = event.clientY - dragRef.current.y;
-    if (!dragRef.current.moved && Math.abs(dx) + Math.abs(dy) > 5) {
+    if (!dragRef.current.moved && isMapDrag(dx, dy)) {
       dragRef.current.moved = true;
       event.currentTarget.setPointerCapture(event.pointerId);
       setIsPanning(true);
     }
     if (!dragRef.current.moved) return;
     const scaleToViewBox = 900 / Math.max(event.currentTarget.getBoundingClientRect().width, 1);
-    setMapPan({
-      x: Math.max(-panLimit, Math.min(panLimit, dragRef.current.originX + dx * scaleToViewBox)),
-      y: Math.max(-panLimit, Math.min(panLimit, dragRef.current.originY + dy * scaleToViewBox)),
-    });
+    const [x, y] = clampPan([dragRef.current.originX + dx * scaleToViewBox, dragRef.current.originY + dy * scaleToViewBox], mapZoom);
+    setMapPan({ x, y });
   };
   const endPan = (event: ReactPointerEvent<SVGSVGElement>) => {
     if (dragRef.current.pointerId !== event.pointerId) return;
@@ -348,21 +346,16 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
   const mapModel = useMemo(() => {
     const allPoints = features.flatMap(feature => polygonRings(feature).flat());
     if (!allPoints.length) return null;
-    const xs = allPoints.map(point => point[0]);
-    const ys = allPoints.map(point => point[1]);
-    const minX = Math.min(...xs), maxX = Math.max(...xs);
-    const minY = Math.min(...ys), maxY = Math.max(...ys);
     const width = 900, height = 480, pad = 28;
-    const scale = Math.min((width - pad * 2) / (maxX - minX), (height - pad * 2) / (maxY - minY));
-    const offsetX = (width - (maxX - minX) * scale) / 2;
-    const offsetY = (height - (maxY - minY) * scale) / 2;
-    const project = ([lon, lat]: number[]) => [offsetX + (lon - minX) * scale, height - offsetY - (lat - minY) * scale];
+    const camera = fitToBounds(allPoints as [number, number][], width, height, pad);
+    if (!camera.bounds) return null;
+    const project = ([lon, lat]: number[]) => [camera.offsetX + (lon - camera.bounds!.minX) * camera.scale, height - camera.offsetY - (lat - camera.bounds!.minY) * camera.scale];
     return features.map(feature => {
       const rings = polygonRings(feature);
       const projected = rings.map(ring => ring.map(project));
       const path = projected.map(ring => ring.map((point, index) => `${index ? "L" : "M"}${point[0].toFixed(1)},${point[1].toFixed(1)}`).join(" ") + " Z").join(" ");
       const outer = projected[0] ?? [];
-      const center = outer.length
+      const center: [number, number] = outer.length
         ? [outer.reduce((sum, p) => sum + p[0], 0) / outer.length, outer.reduce((sum, p) => sum + p[1], 0) / outer.length]
         : [0, 0];
       const projectedPoints = projected.flat();
@@ -375,6 +368,8 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
       return { feature, name: featureName(feature, level), path, center, bounds };
     });
   }, [features, level]);
+
+  const visibleLabels = useMemo(() => prioritizedMapLabels((mapModel ?? []).map(item => ({ ...item, active: level === "district" || /merauke/i.test(item.name), selected: item.name === selectedName })), level === "district" ? 54 : 38, level === "district" ? 12 : 6), [level, mapModel, selectedName]);
 
   const focusedDistrict = useMemo(
     () => level === "district" && selectedName ? mapModel?.find(item => item.name === selectedName) ?? null : null,
@@ -507,9 +502,10 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
                     }}
                   >
                     <path d={item.path} vectorEffect="non-scaling-stroke" style={active && layer !== "Luas Tanam" ? { fill: layerColor(layer, item.name, filters.seasonId) } : undefined} />
-                    <text x={item.center[0]} y={item.center[1]} textAnchor="middle">
+                    <title>{item.name}</title>
+                    {visibleLabels.has(item.name) && <text x={item.center[0]} y={item.center[1]} textAnchor="middle">
                       {item.name}
-                    </text>
+                    </text>}
                   </g>
                 );
               })}

@@ -21,6 +21,8 @@ import {
 import { useDashboardFilters } from "@/components/DashboardFilterProvider";
 import { compareActualAtEquivalentStage, compareProjectedFinalToCompletedSeason, getChartDataPoints } from "@/lib/chart-data";
 import { useAccessibleModal } from "@/components/ui/useAccessibleModal";
+import { MonitoringLineChart } from "@/components/ui/MonitoringLineChart";
+import { fitToBounds, prioritizedMapLabels } from "@/lib/visualization";
 
 type PageName = "Peta Lahan" | "Musim Tanam" | "Produksi";
 
@@ -70,9 +72,6 @@ export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: 
   const achievement = target ? gkg / target * 100 : 0;
   const chartScale = regencyProduction.gkg ? production.gkg / regencyProduction.gkg : 0;
   const chartData = getChartDataPoints(seasonId, "gkg_production_ton", regencyProduction.target, chartScale);
-  const activePoint = chartData.find(point => point.id === filters.snapshotId) ??
-    chartData.find(point => point.isCutoff) ??
-    chartData.filter(point => point.actual !== null).at(-1);
   const plantingStage4 = compareActualAtEquivalentStage("MT1-2026", "MT2-2026", 4, "planting_realization_ha");
   const productionStage4 = compareActualAtEquivalentStage("MT1-2026", "MT2-2026", 4, "gkg_production_ton");
   const finalComparison = compareProjectedFinalToCompletedSeason();
@@ -120,9 +119,7 @@ export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: 
 
         <article className="card executive-chart">
           <ExecutiveTitle title={`TARGET VS REALISASI PRODUKSI GKG — ${currentSeason?.name ?? ""}`} action={() => setProductionDetailOpen(true)}/>
-          <div className="chart-key"><span className="target">Target</span><span className="actual">Realisasi</span><span className="projection">Proyeksi</span></div>
-          <ExecutiveProductionChart seasonId={seasonId} production={production.gkg} target={production.target} />
-          {activePoint && <div className="chart-tooltip"><span>{activePoint.label}</span><strong>Realisasi: {format(activePoint.actual ?? gkg)} ton</strong><small>Target: {format(activePoint.target ?? target)} ton</small><b>{activePoint.isCutoff ? "Cut-off" : currentSeason?.status === "completed" ? "Musim selesai" : "Periode aktif"}</b></div>}
+          <MonitoringLineChart data={chartData} unit="ton" selectedId={filters.snapshotId ?? undefined} ariaLabel="Grafik target dan realisasi produksi GKG" />
         </article>
       </section>
 
@@ -173,27 +170,6 @@ function ExecutiveTitle({ title, action }: { title: string; action?: () => void 
   return <div className="executive-title"><strong>{title}</strong>{action && <button onClick={action}>Lihat Detail <ChevronRight size={14}/></button>}</div>;
 }
 
-function ExecutiveProductionChart({ seasonId, production, target }: { seasonId: string; production: number; target: number }) {
-  const regency = aggregateRegion("93.01", seasonId);
-  const scale = regency.gkg_production_ton ? production / regency.gkg_production_ton : 0;
-  const data = getChartDataPoints(seasonId, "gkg_production_ton", regency.gkg_production_target_ton, scale);
-  const values = data.flatMap(point => [point.target, point.actual, point.projection].filter((value): value is number => value !== null));
-  const max = Math.max(...values, target, 1) * 1.08;
-  const x = (index: number) => 48 + index * (642 / Math.max(1, data.length - 1));
-  const y = (value: number) => 240 - value / max * 210;
-  const points = (field: "target" | "actual" | "projection") => data.filter(point => point[field] !== null).map(point => `${x(point.stageIndex - 1)},${y(point[field]!)}`).join(" ");
-  const cutoff = data.find(point => point.isCutoff);
-  return <svg viewBox="0 0 720 270" preserveAspectRatio="none" aria-label="Grafik target dan realisasi produksi">
-    {[45,90,135,180,225].map(value => <line key={value} x1="48" y1={value} x2="700" y2={value} className="grid"/>)}
-    <polyline className="target-line" points={points("target")} />
-    <polyline className="actual-line" points={points("actual")} />
-    {data.some(point => point.projection !== null) && <polyline className="projection-line" points={points("projection")} />}
-    {data.filter(point => point.actual !== null).map(point => <circle key={point.period} cx={x(point.stageIndex - 1)} cy={y(point.actual!)} r="4"><title>{point.label}: {format(point.actual!)} ton</title></circle>)}
-    {cutoff && <line x1={x(cutoff.stageIndex - 1)} y1="28" x2={x(cutoff.stageIndex - 1)} y2="240" className="today"/>}
-    {data.map(point => <text key={point.period} x={x(point.stageIndex - 1)} y="260" textAnchor="middle">{point.label.split(" ")[0]}</text>)}
-  </svg>;
-}
-
 function AlertItem({ Icon, title, text, warn, blue }: { Icon: typeof Target; title: string; text: string; warn?: boolean; blue?: boolean }) {
   return <article className={warn ? "warn" : blue ? "blue" : ""}><Icon size={25}/><div><strong>{title}</strong><span>{text}</span></div></article>;
 }
@@ -241,20 +217,15 @@ function ExecutiveBigMap({ selected, onSelect }: { selected: string; onSelect: (
   const model = useMemo(() => {
     const points = features.flatMap(feature => featureRings(feature).flat());
     if (!points.length) return [];
-    const xs = points.map(point => point[0]);
-    const ys = points.map(point => point[1]);
-    const minX = Math.min(...xs), maxX = Math.max(...xs);
-    const minY = Math.min(...ys), maxY = Math.max(...ys);
     const width = 900, height = 480, pad = 24;
-    const scale = Math.min((width - pad * 2) / (maxX - minX), (height - pad * 2) / (maxY - minY));
-    const offsetX = (width - (maxX - minX) * scale) / 2;
-    const offsetY = (height - (maxY - minY) * scale) / 2;
-    const project = ([lon, lat]: number[]) => [offsetX + (lon - minX) * scale, height - offsetY - (lat - minY) * scale];
+    const camera = fitToBounds(points as [number, number][], width, height, pad);
+    if (!camera.bounds) return [];
+    const project = ([lon, lat]: number[]) => [camera.offsetX + (lon - camera.bounds!.minX) * camera.scale, height - camera.offsetY - (lat - camera.bounds!.minY) * camera.scale];
     return features.map(feature => {
       const projected = featureRings(feature).map(ring => ring.map(project));
       const path = projected.map(ring => ring.map((point, index) => `${index ? "L" : "M"}${point[0].toFixed(1)},${point[1].toFixed(1)}`).join(" ") + " Z").join(" ");
       const outer = projected[0] ?? [];
-      const center = outer.length ? [
+      const center: [number, number] = outer.length ? [
         outer.reduce((sum, point) => sum + point[0], 0) / outer.length,
         outer.reduce((sum, point) => sum + point[1], 0) / outer.length,
       ] : [0, 0];
@@ -262,12 +233,15 @@ function ExecutiveBigMap({ selected, onSelect }: { selected: string; onSelect: (
     });
   }, [features]);
 
+  const visibleLabels = useMemo(() => prioritizedMapLabels(model.map(item => ({ ...item, selected: item.name === selected, active: true })), 52, 12), [model, selected]);
+
   return <>
     {model.length ? <svg viewBox="0 0 900 480" role="img" aria-label="Peta resmi distrik Kabupaten Merauke dari BIG">
       <g className="executive-big-layer">
         {model.map((item, index) => <g key={item.name} className={selected === item.name ? "selected" : ""} onClick={() => onSelect(item.name)} role="button" tabIndex={0} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") onSelect(item.name); }}>
           <path d={item.path} className={`tone-${index % 3}`} vectorEffect="non-scaling-stroke"/>
-          <text x={item.center[0]} y={item.center[1]}>{item.name}</text>
+          <title>{item.name}</title>
+          {visibleLabels.has(item.name) && <text x={item.center[0]} y={item.center[1]}>{item.name}</text>}
         </g>)}
       </g>
     </svg> : <div className="executive-map-loading">Memuat peta BIG…</div>}
