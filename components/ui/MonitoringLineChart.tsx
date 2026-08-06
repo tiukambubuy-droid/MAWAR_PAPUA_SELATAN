@@ -6,13 +6,14 @@ import { chartDomain, chartSeries, chartValueLabels, formatCompactId, positionCh
 
 type Series = "target" | "actual" | "projection";
 
-export function MonitoringLineChart({ data, unit, ariaLabel, selectedId }: {
+export function MonitoringLineChart({ data, unit, ariaLabel, selectedId, showPersistentValueLabels = true }: {
   data: ChartDataPoint[];
   unit: "ha" | "ton";
   ariaLabel: string;
   selectedId?: string;
+  showPersistentValueLabels?: boolean;
 }) {
-  const [activeId, setActiveId] = useState<string | null>(selectedId ?? data.find(point => point.isCutoff)?.id ?? null);
+  const [activeId, setActiveId] = useState<string | null>(showPersistentValueLabels ? selectedId ?? data.find(point => point.isCutoff)?.id ?? null : null);
   const [tooltipExclusion, setTooltipExclusion] = useState<ChartCollisionRect | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -26,12 +27,13 @@ export function MonitoringLineChart({ data, unit, ariaLabel, selectedId }: {
   const active = data.find(point => point.id === activeId) ?? null;
   const cutoff = data.find(point => point.isCutoff);
   const ticks = Array.from({ length: 5 }, (_, index) => domain.max * index / 4);
-  const valueLabels = positionChartValueLabels(chartValueLabels(data).map(label => ({
+  const importantValues = chartValueLabels(data);
+  const valueLabels = showPersistentValueLabels ? positionChartValueLabels(importantValues.map(label => ({
     ...label,
     text: `${label.field === "actual" ? "Realisasi" : label.field === "target" ? "Target" : "Proyeksi"} ${formatCompactId(label.value)} ${unit}`,
     anchorX: x(label.point.stageIndex - 1),
     anchorY: y(label.value),
-  })), { left: plot.left, right: width - plot.right, top: plot.top, bottom: height - plot.bottom }, tooltipExclusion ? [tooltipExclusion] : []);
+  })), { left: plot.left, right: width - plot.right, top: plot.top, bottom: height - plot.bottom }, tooltipExclusion ? [tooltipExclusion] : []) : [];
   const availableSeries = (["target", "actual", "projection"] as Series[]).filter(field => data.some(point => point[field] !== null));
   const closeTooltip = () => { setActiveId(null); setTooltipExclusion(null); };
   const openTooltip = (pointId: string) => {
@@ -70,7 +72,7 @@ export function MonitoringLineChart({ data, unit, ariaLabel, selectedId }: {
       {availableSeries.map(field => <span key={field} className={field}><i />{field === "target" ? "Target" : field === "actual" ? "Realisasi" : "Proyeksi"}</span>)}
       <em>Satuan: {unit}</em>
     </div>
-    <div className="monitoring-chart-stage" ref={stageRef} onMouseLeave={closeTooltip} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) closeTooltip(); }}>
+    <div className="monitoring-chart-stage" ref={stageRef} onMouseLeave={closeTooltip} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) closeTooltip(); }} onKeyDown={event => { if (event.key === "Escape") closeTooltip(); }}>
       <svg ref={svgRef} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={ariaLabel} preserveAspectRatio="xMidYMid meet">
         <title>{ariaLabel}</title>
         <desc>Grafik target, realisasi, proyeksi, dan cut-off berdasarkan data musim aktif.</desc>
@@ -104,6 +106,6 @@ export function MonitoringLineChart({ data, unit, ariaLabel, selectedId }: {
         {active.isCutoff && <em>Cut-off data</em>}
       </div>}
     </div>
-    <p className="sr-only">{valueLabels.map(label => `${label.field === "actual" ? "Realisasi pada cut-off" : label.field === "target" ? "Target akhir" : "Proyeksi akhir"} ${label.value.toLocaleString("id-ID")} ${unit}.`).join(" ")}</p>
+    <p className="sr-only">{importantValues.map(label => `${label.field === "actual" ? "Realisasi pada cut-off" : label.field === "target" ? "Target akhir" : "Proyeksi akhir"} ${label.value.toLocaleString("id-ID")} ${unit}.`).join(" ")}</p>
   </div>;
 }

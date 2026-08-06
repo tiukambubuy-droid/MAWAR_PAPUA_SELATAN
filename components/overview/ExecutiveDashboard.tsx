@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   AlertTriangle, CalendarDays, CheckCircle2, ChevronRight,
@@ -23,6 +23,7 @@ import { compareActualAtEquivalentStage, compareProjectedFinalToCompletedSeason,
 import { useAccessibleModal } from "@/components/ui/useAccessibleModal";
 import { MonitoringLineChart } from "@/components/ui/MonitoringLineChart";
 import { fitToBounds, prioritizedMapLabels } from "@/lib/visualization";
+import { createBigMapRequestController, createBigMapViewCallbacks, reduceBigMapViewState, type BigMapRequestController, type BigMapViewState } from "@/lib/big-map-request-controller";
 
 type PageName = "Peta Lahan" | "Musim Tanam" | "Produksi";
 
@@ -111,21 +112,20 @@ export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: 
       <section className="executive-primary">
         <article className="card executive-map">
           <ExecutiveTitle title="PETA SEBARAN LAHAN" action={() => onNavigate("Peta Lahan")}/>
-          <div className="executive-map-stage">
-            <ExecutiveBigMap selected={selectedDistrictName} onSelect={name => setDistrict(getRegionByName(name, "district")?.id ?? null)}/>
-            <div className="map-selection"><MapPin size={17}/><span>{selectedDistrict ? `Distrik ${selectedDistrict.name}` : "Kabupaten Merauke"}</span><strong>{selectedDistrict?.monitoring_status === "not_monitored" ? "Belum dipantau" : selectedRow ? `${format(selectedRow.gkg)} ton GKG · wilayah terpantau` : "Klik distrik untuk melihat data"}</strong></div>
-          </div>
+          <ExecutiveBigMap selected={selectedDistrictName} selectedLabel={selectedDistrict ? `Distrik ${selectedDistrict.name}` : "Kabupaten Merauke"} hint={selectedDistrict?.monitoring_status === "not_monitored" ? "Belum dipantau" : selectedRow ? `${format(selectedRow.gkg)} ton GKG · wilayah terpantau` : "Pilih distrik untuk melihat data"} onSelect={name => setDistrict(getRegionByName(name, "district")?.id ?? null)}/>
         </article>
 
         <article className="card executive-chart">
           <ExecutiveTitle title={`TARGET VS REALISASI PRODUKSI GKG — ${currentSeason?.name ?? ""}`} action={() => setProductionDetailOpen(true)}/>
-          <MonitoringLineChart data={chartData} unit="ton" selectedId={filters.snapshotId ?? undefined} ariaLabel="Grafik target dan realisasi produksi GKG" />
+          <MonitoringLineChart data={chartData} unit="ton" selectedId={filters.snapshotId ?? undefined} ariaLabel="Grafik target dan realisasi produksi GKG" showPersistentValueLabels={false} />
         </article>
       </section>
 
       <section className="executive-secondary">
-        <article className="card current-season"><ExecutiveTitle title="MUSIM TANAM TERPILIH"/><div><strong>{currentSeason?.display_name} <b>{currentSeason?.status === "completed" ? "Selesai" : "Berjalan"}</b></strong><span>Cakupan</span><em>{selectedDistrict ? `Distrik ${selectedDistrict.name}` : "Kabupaten Merauke"}</em><i><b style={{width:`${Math.min(100, achievement)}%`}}/></i><span>Cut-off</span><strong>{currentSeason?.reporting_cutoff}</strong><span>Status Data</span><b className="normal">Terpantau</b></div></article>
-        <article className="card production-recap"><ExecutiveTitle title="RINGKASAN PRODUKSI"/><div><p>Produksi GKG <b>{format(gkg)} ton</b></p><p>Estimasi Beras <b>{format(rice)} ton</b></p><p>Produktivitas <b>{format(production.yieldRate,2)} ton/ha</b></p><p>Target Produksi <b>{format(target)} ton</b></p><strong>Capaian Target <b>{format(achievement,1)}%</b></strong></div></article>
+        <div className="executive-secondary-left">
+          <article className="card current-season"><ExecutiveTitle title="MUSIM TANAM TERPILIH"/><div><strong>{currentSeason?.display_name} <b>{currentSeason?.status === "completed" ? "Selesai" : "Berjalan"}</b></strong><span>Cakupan</span><em>{selectedDistrict ? `Distrik ${selectedDistrict.name}` : "Kabupaten Merauke"}</em><i><b style={{width:`${Math.min(100, achievement)}%`}}/></i><span>Cut-off</span><strong>{currentSeason?.reporting_cutoff}</strong><span>Status Data</span><b className="normal">Terpantau</b></div></article>
+          <article className="card production-recap"><ExecutiveTitle title="RINGKASAN PRODUKSI"/><div><p>Produksi GKG <b>{format(gkg)} ton</b></p><p>Estimasi Beras <b>{format(rice)} ton</b></p><p>Produktivitas <b>{format(production.yieldRate,2)} ton/ha</b></p><p>Target Produksi <b>{format(target)} ton</b></p><strong>Capaian Target <b>{format(achievement,1)}%</b></strong></div></article>
+        </div>
         <article className="card top-regions"><ExecutiveTitle title="WILAYAH KONTRIBUTOR TERBESAR" action={() => onNavigate("Produksi")}/><div>{productionRows.slice().sort((a,b)=>b.gkg-a.gkg).slice(0,5).map(row=><p key={row.id}><span>{row.name}</span><i><b style={{width:`${row.gkg/Math.max(...productionRows.map(item=>item.gkg))*100}%`}}/></i><strong>{format(row.gkg)}</strong><em>{format(row.gkg/production.gkg*100,1)}%</em></p>)}</div></article>
         <article className="card system-summary"><ExecutiveTitle title="RINGKASAN SISTEM"/><div>{[
           `Luas tanam mencapai ${format(planted)} ha, naik 8,4% dibanding tahun 2025.`,
@@ -174,50 +174,50 @@ function AlertItem({ Icon, title, text, warn, blue }: { Icon: typeof Target; tit
   return <article className={warn ? "warn" : blue ? "blue" : ""}><Icon size={25}/><div><strong>{title}</strong><span>{text}</span></div></article>;
 }
 
-function ExecutiveBigMap({ selected, onSelect }: { selected: string; onSelect: (name: string) => void }) {
-  const [features, setFeatures] = useState<GeoFeature[]>([]);
-  const [sourceMode, setSourceMode] = useState<"BIG" | "cadangan BIG">("BIG");
+function ExecutiveBigMap({ selected, selectedLabel, hint, onSelect }: { selected: string; selectedLabel: string; hint: string; onSelect: (name: string) => void }) {
+  // Executive preview contract: district click/keyboard selection only. Full zoom,
+  // pan, reset and drag interactions remain on the dedicated Peta Lahan page.
+  const [mapState, dispatchMapState] = useReducer(
+    reduceBigMapViewState<GeoFeature>,
+    { features: [], sourceMode: "big", status: "loading", context: null } satisfies BigMapViewState<GeoFeature>,
+  );
+  const requestControllerRef = useRef<BigMapRequestController<GeoFeature> | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    const controller = new AbortController();
-    const query = new URLSearchParams({
-      where: "wadmkk='Merauke'",
-      outFields: "namobj,wadmkc,wadmkk,wadmpr",
-      returnGeometry: "true",
-      outSR: "4326",
-      geometryPrecision: "4",
-      maxAllowableOffset: "0.001",
-      f: "geojson",
-    });
-    fetch(`${bigDistrictService}/0/query?${query}`, { signal: controller.signal })
-      .then(response => {
+    const controller = createBigMapRequestController<GeoFeature>({
+      loadRemote: async (_context, signal) => {
+        const query = new URLSearchParams({
+          where: "wadmkk='Merauke'",
+          outFields: "namobj,wadmkc,wadmkk,wadmpr",
+          returnGeometry: "true",
+          outSR: "4326",
+          geometryPrecision: "4",
+          maxAllowableOffset: "0.001",
+          f: "geojson",
+        });
+        const response = await fetch(`${bigDistrictService}/0/query?${query}`, { signal });
         if (!response.ok) throw new Error("BIG unavailable");
-        return response.json();
-      })
-      .then(data => {
-        if (!cancelled && Array.isArray(data.features) && data.features.length) setFeatures(data.features);
-      })
-      .catch(async (error) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        try {
-          const response = await fetch("/data/merauke-districts.geojson");
-          const data = await response.json();
-          if (!cancelled && Array.isArray(data.features)) {
-            setFeatures(data.features);
-            setSourceMode("cadangan BIG");
-          }
-        } catch {
-          if (!cancelled) setFeatures([]);
-        }
-      });
-    return () => { cancelled = true; controller.abort(); };
+        const data = await response.json();
+        return Array.isArray(data.features) ? data.features : [];
+      },
+      loadFallback: async (_context, signal) => {
+        const response = await fetch("/data/merauke-districts.geojson", { signal });
+        if (!response.ok) throw new Error("Fallback BIG unavailable");
+        const data = await response.json();
+        return Array.isArray(data.features) ? data.features : [];
+      },
+    }, createBigMapViewCallbacks<GeoFeature>(dispatchMapState));
+    requestControllerRef.current = controller;
+    void controller.load({ requestKey: "executive-merauke-districts", regionId: "93.01", regionLevel: "district" });
+    return () => { controller.dispose(); requestControllerRef.current = null; };
   }, []);
+
+  const features = mapState.features;
 
   const model = useMemo(() => {
     const points = features.flatMap(feature => featureRings(feature).flat());
     if (!points.length) return [];
-    const width = 900, height = 480, pad = 24;
+    const width = 900, height = 480, pad = 12;
     const camera = fitToBounds(points as [number, number][], width, height, pad);
     if (!camera.bounds) return [];
     const project = ([lon, lat]: number[]) => [camera.offsetX + (lon - camera.bounds!.minX) * camera.scale, height - camera.offsetY - (lat - camera.bounds!.minY) * camera.scale];
@@ -235,8 +235,8 @@ function ExecutiveBigMap({ selected, onSelect }: { selected: string; onSelect: (
 
   const visibleLabels = useMemo(() => prioritizedMapLabels(model.map(item => ({ ...item, selected: item.name === selected, active: true })), 52, 12), [model, selected]);
 
-  return <>
-    {model.length ? <svg viewBox="0 0 900 480" role="img" aria-label="Peta resmi distrik Kabupaten Merauke dari BIG">
+  return <div className="executive-map-stage">
+    <div className="executive-map-canvas">{model.length ? <svg viewBox="0 0 900 480" role="img" aria-label="Peta resmi distrik Kabupaten Merauke dari BIG">
       <g className="executive-big-layer">
         {model.map((item, index) => <g key={item.name} className={selected === item.name ? "selected" : ""} onClick={() => onSelect(item.name)} role="button" tabIndex={0} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") onSelect(item.name); }}>
           <path d={item.path} className={`tone-${index % 3}`} vectorEffect="non-scaling-stroke"/>
@@ -244,9 +244,12 @@ function ExecutiveBigMap({ selected, onSelect }: { selected: string; onSelect: (
           {visibleLabels.has(item.name) && <text x={item.center[0]} y={item.center[1]}>{item.name}</text>}
         </g>)}
       </g>
-    </svg> : <div className="executive-map-loading">Memuat peta BIG…</div>}
-    <div className="executive-map-source"><span>◉</span> Badan Informasi Geospasial · WGS 84 · {sourceMode}</div>
-  </>;
+    </svg> : mapState.status === "error" ? <div className="executive-map-error" role="status"><strong>Peta pratinjau belum tersedia.</strong><span>Buka Peta Lahan melalui Lihat Detail untuk pemantauan lengkap.</span></div> : <div className="executive-map-loading" role="status">Memuat peta BIG…</div>}</div>
+    <div className="executive-map-footer">
+      <div className="executive-map-source"><span>◉</span> Badan Informasi Geospasial · WGS 84 · {mapState.sourceMode === "fallback" ? "cadangan BIG" : "BIG"}</div>
+      <div className="map-selection"><MapPin size={19}/><span><b>{selectedLabel}</b><small>{hint}</small></span></div>
+    </div>
+  </div>;
 }
 
 function ExecutiveProductionModal({
