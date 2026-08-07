@@ -6,7 +6,7 @@ import { chartDomain, chartSeries, chartSummaryItems, chartValueLabels, formatCo
 
 type Series = "target" | "actual" | "projection";
 
-export function MonitoringLineChart({ data, unit, ariaLabel, selectedId, showSummaryStrip = false, summaryStatus, showPersistentValueLabels = true, presentation = "default", seriesLabels, summaryItemsOverride }: {
+export function MonitoringLineChart({ data, unit, ariaLabel, selectedId, showSummaryStrip = false, summaryStatus, showPersistentValueLabels = true, presentation = "default", seriesLabels, summaryItemsOverride, tooltipVariant = "default" }: {
   data: ChartDataPoint[];
   unit: "ha" | "ton";
   ariaLabel: string;
@@ -17,6 +17,7 @@ export function MonitoringLineChart({ data, unit, ariaLabel, selectedId, showSum
   presentation?: "default" | "production";
   seriesLabels?: Partial<Record<Series, string>>;
   summaryItemsOverride?: Array<{ field: Series | "balance"; label: string; value: number | null }>;
+  tooltipVariant?: "default" | "food-security";
 }) {
   const renderPersistentValueLabels = showPersistentValueLabels && !showSummaryStrip;
   const labelFor = (field: Series) => seriesLabels?.[field] ?? (field === "target" ? "Target" : field === "actual" ? "Realisasi" : "Proyeksi");
@@ -115,7 +116,7 @@ export function MonitoringLineChart({ data, unit, ariaLabel, selectedId, showSum
           />)}
         </g>)}
       </svg>
-      {active && <div ref={tooltipRef} className={`monitoring-chart-tooltip ${active.stageIndex > data.length / 2 ? "tooltip-corner-left" : "tooltip-corner-right"}`}>
+      {active && <div ref={tooltipRef} className={`monitoring-chart-tooltip ${tooltipVariant === "food-security" ? "food-security-tooltip" : ""} ${active.stageIndex > data.length / 2 ? "tooltip-corner-left" : "tooltip-corner-right"}`}>
         <strong>{active.label}</strong>
         {active.target !== null && <span>{labelFor("target")} <b>{active.target.toLocaleString("id-ID")} {unit}</b></span>}
         {active.actual !== null && <span>{labelFor("actual")} <b>{active.actual.toLocaleString("id-ID")} {unit}</b></span>}

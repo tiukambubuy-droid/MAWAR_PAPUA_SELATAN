@@ -54,6 +54,7 @@ try {
   await send("Network.setBlockedURLs", { urls: ["https://geoservices.big.go.id/*"] });
 
   const viewports = [[1920, 1080], [1440, 900], [1366, 768], [1024, 768], [768, 1024], [430, 932], [390, 844]];
+  const foodLayoutMetrics = [];
   for (const [width, height] of viewports) {
     await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width <= 430 });
     await send("Page.navigate", { url: "about:blank" });
@@ -125,13 +126,54 @@ try {
     assert.equal(await evaluate("document.querySelectorAll('.food-balance-chart .monitoring-chart').length"), 1);
     assert.equal(await evaluate("document.querySelectorAll('.food-balance-chart .chart-value-label').length"), 0);
     assert.equal(await evaluate("document.querySelectorAll('.food-balance-chart .monitoring-chart-summary-item').length"), 3);
+    const foodLayout=await evaluate(`(()=>{const box=s=>{const r=document.querySelector(s).getBoundingClientRect();return{x:r.x,y:r.y,width:r.width,height:r.height,right:r.right,bottom:r.bottom}},chart=box('.food-balance-chart'),stock=box('.stock-card'),resilience=box('.resilience-card');return{chart,stock,resilience,labels:[...document.querySelectorAll('.food-balance-chart .chart-x-label')].map(node=>node.textContent),overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+1}})()`);
+    const rightStackHeight=foodLayout.stock.height+foodLayout.resilience.height+15;
+    foodLayoutMetrics.push({width,height,chartHeight:foodLayout.chart.height,stockHeight:foodLayout.stock.height,resilienceHeight:foodLayout.resilience.height,rightStackHeight,differenceRatio:Math.abs(rightStackHeight-foodLayout.chart.height)/foodLayout.chart.height,overflow:foodLayout.overflow});
+    assert.deepEqual(foodLayout.labels,["Apr","Mei","Jun","Jul","Agu","Sep"]);
+    assert.ok(foodLayout.chart.height<600&&!foodLayout.overflow,`${width}x${height}: ${JSON.stringify(foodLayout)}`);
+    if(width>=1200) {
+      assert.ok(foodLayout.chart.right<=foodLayout.stock.x+1&&foodLayout.stock.bottom<=foodLayout.resilience.y+1);
+      assert.ok(Math.abs(rightStackHeight-foodLayout.chart.height)/foodLayout.chart.height<=0.15,`${width}x${height}: chart ${foodLayout.chart.height}, stack ${rightStackHeight}`);
+    }
+    if(width>=768&&width<1200) assert.ok(foodLayout.stock.height!==foodLayout.resilience.height&&foodLayout.stock.bottom<=foodLayout.stock.y+foodLayout.stock.height+1);
+    if(width<768) assert.ok(foodLayout.chart.bottom<=foodLayout.stock.y+1&&foodLayout.stock.bottom<=foodLayout.resilience.y+1);
+    if ([1440,768,390].includes(width)) {
+      const foodTooltipBox=()=>evaluate(`(()=>{const tip=document.querySelector('.food-security-tooltip'),card=document.querySelector('.food-balance-chart').getBoundingClientRect(),summary=document.querySelector('.food-balance-chart .monitoring-chart-summary').getBoundingClientRect();if(!tip)return null;const rect=tip.getBoundingClientRect(),style=getComputedStyle(tip);return{text:tip.innerText,inside:rect.left>=card.left-1&&rect.right<=card.right+1&&rect.top>=card.top-1&&rect.bottom<=card.bottom+1,belowSummary:rect.top>=summary.bottom-1,padding:parseFloat(style.paddingLeft),clientWidth:tip.clientWidth,scrollWidth:tip.scrollWidth,clientHeight:tip.clientHeight,scrollHeight:tip.scrollHeight,clipped:tip.scrollWidth>tip.clientWidth+1||tip.scrollHeight>tip.clientHeight+1}})()`);
+      for (const index of [0,1,3]) {
+        await evaluate(`document.querySelectorAll('.food-balance-chart .chart-point')[${index}].dispatchEvent(new MouseEvent('mouseover',{bubbles:true}))`); await sleep(25);
+        const box=await foodTooltipBox(); assert.ok(box?.inside&&box.belowSummary&&box.padding>=12&&!box.clipped&&box.text.includes('2026'),`${width}x${height} point ${index}: ${JSON.stringify(box)}`);
+      }
+      await evaluate("document.querySelector('.food-balance-chart .monitoring-chart-stage').dispatchEvent(new MouseEvent('mouseout',{bubbles:true,relatedTarget:document.body}))"); await sleep(20);
+      assert.equal(await evaluate("Boolean(document.querySelector('.food-security-tooltip'))"),false);
+      await evaluate("(()=>{const point=document.querySelectorAll('.food-balance-chart .chart-point')[0];point.focus();point.dispatchEvent(new FocusEvent('focusin',{bubbles:true}))})()"); await sleep(20);
+      const firstFocus=await evaluate("document.querySelector('.food-security-tooltip strong')?.innerText");
+      await evaluate("(()=>{const point=document.querySelectorAll('.food-balance-chart .chart-point')[1];point.focus();point.dispatchEvent(new FocusEvent('focusin',{bubbles:true}))})()"); await sleep(20);
+      assert.notEqual(await evaluate("document.querySelector('.food-security-tooltip strong')?.innerText"),firstFocus);
+      await evaluate("document.querySelector('.food-balance-chart .monitoring-chart-stage').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))"); await sleep(20);
+      assert.equal(await evaluate("Boolean(document.querySelector('.food-security-tooltip'))"),false);
+      await evaluate("(()=>{const point=document.querySelectorAll('.food-balance-chart .chart-point')[0];point.dispatchEvent(new FocusEvent('focusin',{bubbles:true}));point.dispatchEvent(new FocusEvent('focusout',{bubbles:true,relatedTarget:document.body}));point.blur()})()"); await sleep(20);
+      assert.equal(await evaluate("Boolean(document.querySelector('.food-security-tooltip'))"),false);
+      await evaluate("document.querySelectorAll('.food-balance-chart .chart-point')[0].dispatchEvent(new MouseEvent('click',{bubbles:true}))"); await sleep(20);
+      assert.ok(await foodTooltipBox());
+      await evaluate("document.querySelectorAll('.food-balance-chart .chart-point')[0].dispatchEvent(new MouseEvent('click',{bubbles:true}))"); await sleep(20);
+      assert.equal(await evaluate("Boolean(document.querySelector('.food-security-tooltip'))"),false);
+      await evaluate("document.querySelectorAll('.food-balance-chart .chart-point')[0].dispatchEvent(new MouseEvent('click',{bubbles:true}));document.querySelectorAll('.food-balance-chart .chart-point')[2].dispatchEvent(new MouseEvent('click',{bubbles:true}))"); await sleep(20);
+      assert.ok((await evaluate("document.querySelector('.food-security-tooltip strong')?.innerText"))?.includes('2026'));
+      await evaluate(`(()=>{const select=[...document.querySelectorAll('.food-security-page select')].find(node=>node.closest('label')?.innerText.startsWith('Musim'));select.value='MT1-2026';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(30);
+      assert.equal(await evaluate("Boolean(document.querySelector('.food-security-tooltip'))"),false);
+      await evaluate("document.querySelectorAll('.food-balance-chart .chart-point')[0].dispatchEvent(new MouseEvent('click',{bubbles:true}))"); await sleep(20);
+      await evaluate(`(()=>{const select=[...document.querySelectorAll('.food-security-page select')].find(node=>node.closest('label')?.innerText.startsWith('Distrik'));select.value='93.01.06';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(80);
+      assert.equal(await evaluate("Boolean(document.querySelector('.food-security-tooltip'))"),false);
+      await evaluate("document.querySelectorAll('.food-balance-chart .chart-point')[0].dispatchEvent(new MouseEvent('click',{bubbles:true}))"); await sleep(20);
+      assert.match(await evaluate("document.querySelector('.food-security-tooltip')?.innerText"),/Okt 2025/);
+    }
     await evaluate(`(()=>{const select=[...document.querySelectorAll('.food-security-page select')].find(node=>node.closest('label')?.innerText.startsWith('Musim'));select.value='MT1-2026';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(30);
     assert.ok(await evaluate("document.querySelectorAll('.food-security-page .monitoring-table tbody tr').length > 0"));
     await evaluate(`(()=>{const select=[...document.querySelectorAll('.food-security-page select')].find(node=>node.closest('label')?.innerText.startsWith('Distrik'));select.value='93.01.02';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(30);
     assert.equal(await evaluate("document.querySelector('.food-security-page .monitoring-empty')?.innerText"), "Belum dipantau");
     await evaluate(`(()=>{const select=[...document.querySelectorAll('.food-security-page select')].find(node=>node.closest('label')?.innerText.startsWith('Distrik'));select.value='93.01.05';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await waitFor(".food-security-page .monitoring-table tbody button");
     await evaluate("(()=>{const button=document.querySelector('.food-security-page .monitoring-table tbody button');button.dataset.qaTrigger='food';button.focus();button.click()})()"); await waitFor(".monitoring-modal[role=dialog]");
-    await sleep(30);
+    await sleep(80);
     assert.equal(await evaluate("getComputedStyle(document.body).overflow"), "hidden");
     assert.equal(await evaluate("document.activeElement===document.querySelector('.monitoring-modal')"), true);
     await evaluate("document.querySelector('.monitoring-modal').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))"); await sleep(30);
@@ -167,6 +209,10 @@ try {
     await evaluate("document.querySelector('.monitoring-modal footer button').click()"); await sleep(30);
     assert.equal(await evaluate("document.activeElement?.dataset.qaTrigger"), "input");
     assert.notEqual(await evaluate("getComputedStyle(document.body).overflow"), "hidden");
+    await evaluate(`(()=>{const select=[...document.querySelectorAll('.infrastructure-page .local-filters select')].find(node=>node.closest('label')?.innerText.startsWith('Validasi'));select.value='rejected';select.dispatchEvent(new Event('change',{bubbles:true}))})()`);await sleep(30);
+    assert.equal(await evaluate("document.querySelector('.infrastructure-page .table-empty')?.innerText"),"Tidak ada data sesuai filter.");
+    assert.equal(await evaluate("Boolean(document.querySelector('.infrastructure-page .compact-empty-state'))"),false);
+    await evaluate(`(()=>{const select=[...document.querySelectorAll('.infrastructure-page .local-filters select')].find(node=>node.closest('label')?.innerText.startsWith('Validasi'));select.value='all';select.dispatchEvent(new Event('change',{bubbles:true}))})()`);await sleep(30);
     if (width === 1440) {
       const infrastructureUrl = await evaluate("location.href");
       await send("Page.reload"); await waitFor(".infrastructure-page"); await sleep(350);
@@ -207,13 +253,20 @@ try {
   assert.equal(await evaluate("document.querySelectorAll('.season-line-card .chart-value-label').length"), 0);
   await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Ketahanan Pangan\"]')?.click()"); await waitFor(".food-security-page");
   const setFoodContext = async (season,district) => { await evaluate(`(()=>{const selects=[...document.querySelectorAll('.food-security-page select')],season=selects.find(node=>node.closest('label')?.innerText.startsWith('Musim')),district=selects.find(node=>node.closest('label')?.innerText.startsWith('Distrik'));season.value=${JSON.stringify(season)};season.dispatchEvent(new Event('change',{bubbles:true}));district.value=${JSON.stringify(district)};district.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(50); };
-  const resilienceValues = () => evaluate(`(()=>{const value=label=>[...document.querySelectorAll('.resilience-card>div>span')].find(node=>node.querySelector('b')?.innerText===label)?.querySelector('i')?.innerText;const kpi=label=>[...document.querySelectorAll('.food-security-page .monitoring-kpis article')].find(node=>node.querySelector('span')?.innerText===label)?.querySelector('strong')?.innerText;return{availability:value('Ketersediaan'),production:value('Capaian produksi'),irrigation:value('Kesiapan irigasi'),inputs:value('Pemenuhan sarana'),validation:value('Validasi'),total:kpi('Indikator Resiliensi')}})()`);
+  for (const district of ["93.01.01","93.01.05","93.01.06","93.01.07","93.01.11","93.01.14"]) {
+    await setFoodContext("MT2-2026",district);
+    assert.equal(await evaluate("document.querySelectorAll('.food-balance-chart .chart-point').length"),4,`${district} harus memiliki empat titik actual MT II`);
+    assert.deepEqual(await evaluate("[...document.querySelectorAll('.food-balance-chart .chart-x-label')].map(node=>node.textContent)"),["Apr","Mei","Jun","Jul","Agu","Sep"]);
+  }
+  const resilienceValues = () => evaluate(`(()=>{const value=label=>[...document.querySelectorAll('.resilience-card dl>div')].find(node=>node.querySelector('dt')?.childNodes[0]?.textContent===label)?.querySelector('dd')?.innerText;const kpi=label=>[...document.querySelectorAll('.food-security-page .monitoring-kpis article')].find(node=>node.querySelector('span')?.innerText===label)?.querySelector('strong')?.innerText;return{availability:value('Ketersediaan'),production:value('Capaian produksi'),irrigation:value('Kesiapan irigasi'),inputs:value('Pemenuhan sarana'),validation:value('Validasi'),total:kpi('Indikator Resiliensi')}})()`);
   await setFoodContext("MT1-2026","");
   assert.deepEqual(await resilienceValues(),{availability:"100%",production:"99,1%",irrigation:"86,2%",inputs:"92,6%",validation:"83,3%",total:"94,3 %"});
   await setFoodContext("MT2-2026","");
   assert.deepEqual(await resilienceValues(),{availability:"100%",production:"88,5%",irrigation:"87,2%",inputs:"90,5%",validation:"83,3%",total:"91,5 %"});
   await setFoodContext("MT2-2026","93.01.05");
   assert.deepEqual(await resilienceValues(),{availability:"100%",production:"88,3%",irrigation:"91%",inputs:"92,9%",validation:"100%",total:"94,2 %"});
+  const foodPoints=await evaluate("document.querySelectorAll('.food-balance-chart .chart-point').length");assert.equal(foodPoints,4);
+  for(const index of [0,1,3]){await evaluate(`(()=>{const p=document.querySelectorAll('.food-balance-chart .chart-point')[${index}];p.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}))})()`);await sleep(25);assert.ok(await evaluate("Boolean(document.querySelector('.food-security-tooltip'))"));assert.ok(await evaluate("document.querySelector('.food-security-tooltip strong').innerText.includes('2026')"));await evaluate("document.querySelector('.food-balance-chart .monitoring-chart-stage').dispatchEvent(new MouseEvent('mouseleave',{bubbles:true}))");}
   await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Produksi\"]')?.click()"); await waitFor(".production-kpis");
   const productionCrossPage=await evaluate(`(()=>{const value=label=>[...document.querySelectorAll('.production-kpis article')].find(node=>node.querySelector('small')?.innerText===label)?.querySelector('strong')?.innerText.replace(/\s+/g,' ').trim();return{gkg:value('Produksi GKG'),rice:value('Estimasi Beras'),achievement:value('Capaian Target')}})()`);
   assert.deepEqual(productionCrossPage,{gkg:"26.553 ton",rice:"16.832 ton",achievement:"88,3 %"});
@@ -223,9 +276,11 @@ try {
   assert.deepEqual(irrigationCrossPage,{functional:true,water:true});
   await evaluate("document.querySelector('.monitoring-modal footer button').click()"); await sleep(30);
   await evaluate(`(()=>{const select=[...document.querySelectorAll('.infrastructure-page select')].find(node=>node.closest('label')?.innerText.startsWith('Distrik'));select.value='93.01.02';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(40);
-  assert.equal(await evaluate("document.querySelector('.infrastructure-page .monitoring-empty')?.innerText"),"Belum dipantau");
-  assert.equal(await evaluate("/0\s*(%|ton|km)/.test(document.querySelector('.infrastructure-page .monitoring-empty')?.innerText??'')"),false);
+  assert.equal(await evaluate("document.querySelector('.infrastructure-page .compact-empty-state h2')?.innerText"),"Wilayah belum dipantau");
+  assert.equal(await evaluate("document.querySelectorAll('.infrastructure-page .monitoring-kpis').length"),0);
+  assert.equal(await evaluate("/0\s*(%|ton|km)/.test(document.querySelector('.infrastructure-page .compact-empty-state')?.innerText??'')"),false);
   assert.deepEqual(runtimeErrors, []);
+  console.log(`Food layout metrics: ${JSON.stringify(foodLayoutMetrics)}`);
   console.log(`Browser DOM PASS: ${viewports.map(([w,h])=>`${w}x${h}`).join(", ")}`);
 } finally {
   try { socket?.close(); } catch {}

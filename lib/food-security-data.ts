@@ -3,6 +3,23 @@ import { aggregateRegion, getSeasonById, millingYield, regions } from "@/lib/dat
 import type { ChartDataPoint } from "@/lib/chart-data";
 
 export type FoodSecurityRecord = (typeof foodSecurityJson.records)[number];
+export type FoodSecurityMonthlySnapshot = {
+  id: string;
+  season_id: string;
+  region_id: string;
+  period: string;
+  stage_index: number;
+  status: "actual" | "not_available";
+  availability_balance_ton: number | null;
+  period_need_ton: number | null;
+  physical_stock_ton: number | null;
+  surplus_deficit_ton: number | null;
+  data_type: "simulation";
+  monitoring_status: "monitored";
+  validation_status: string;
+  updated_at: string;
+  source_type: "prototype";
+};
 export type FoodSecurityMetrics = {
   record: FoodSecurityRecord;
   physicalStockTon: number;
@@ -63,6 +80,9 @@ export function selectFoodSecurity(seasonId: string, regionId = "93.01", validat
   const annualNeedTon = total("annualNeedTon");
   const physicalStockTon = total("physicalStockTon");
   const aggregate = {
+    bulogStockTon: items.reduce((sum, item) => sum + item.record.bulog_stock_ton, 0),
+    governmentReserveTon: items.reduce((sum, item) => sum + item.record.government_reserve_ton, 0),
+    localWarehouseStockTon: items.reduce((sum, item) => sum + item.record.local_warehouse_stock_ton, 0),
     physicalStockTon,
     estimatedRiceProductionTon: total("estimatedRiceProductionTon"),
     annualNeedTon,
@@ -76,27 +96,88 @@ export function selectFoodSecurity(seasonId: string, regionId = "93.01", validat
   return { monitored: true, items, aggregate };
 }
 
+const snapshotCurve = foodSecurityJson.metadata.monthly_snapshot_curve;
+
+export function buildFoodSecurityMonthlySnapshots(validation = "all"): FoodSecurityMonthlySnapshot[] {
+  const districts = foodSecurityRecords.filter(record => validation === "all" || record.validation_status === validation);
+  const districtSnapshots = districts.flatMap(record => {
+    const metrics = calculateFoodSecurity(record);
+    if (!metrics) return [];
+    const curve = snapshotCurve[record.season_id as keyof typeof snapshotCurve];
+    return curve.map(stage => {
+      const available = stage.status === "actual" && stage.allocation !== null;
+      const availability = available ? metrics.balanceAvailabilityTon * stage.allocation : null;
+      const need = available ? metrics.seasonNeedTon * stage.allocation : null;
+      return {
+        id: `FSMS-${record.region_id.replaceAll(".", "")}-${record.season_id}-${stage.period}`,
+        season_id: record.season_id,
+        region_id: record.region_id,
+        period: stage.period,
+        stage_index: stage.stage_index,
+        status: stage.status as FoodSecurityMonthlySnapshot["status"],
+        availability_balance_ton: availability,
+        period_need_ton: need,
+        physical_stock_ton: available ? metrics.physicalStockTon * stage.allocation : null,
+        surplus_deficit_ton: availability !== null && need !== null ? availability - need : null,
+        data_type: "simulation" as const,
+        monitoring_status: "monitored" as const,
+        validation_status: record.validation_status,
+        updated_at: record.updated_at,
+        source_type: "prototype" as const,
+      };
+    });
+  });
+  const countySnapshots = (Object.keys(snapshotCurve) as Array<keyof typeof snapshotCurve>).flatMap(seasonId =>
+    snapshotCurve[seasonId].map(stage => {
+      const rows = districtSnapshots.filter(row => row.season_id === seasonId && row.stage_index === stage.stage_index);
+      const sum = (field: "availability_balance_ton" | "period_need_ton" | "physical_stock_ton" | "surplus_deficit_ton") =>
+        stage.status === "actual" ? rows.reduce((total, row) => total + (row[field] ?? 0), 0) : null;
+      return {
+        id: `FSMS-9301-${seasonId}-${stage.period}`,
+        season_id: seasonId,
+        region_id: "93.01",
+        period: stage.period,
+        stage_index: stage.stage_index,
+        status: stage.status as FoodSecurityMonthlySnapshot["status"],
+        availability_balance_ton: sum("availability_balance_ton"),
+        period_need_ton: sum("period_need_ton"),
+        physical_stock_ton: sum("physical_stock_ton"),
+        surplus_deficit_ton: sum("surplus_deficit_ton"),
+        data_type: "simulation" as const,
+        monitoring_status: "monitored" as const,
+        validation_status: validation,
+        updated_at: foodSecurityRecords[0]?.updated_at ?? "2026-07-24T22:42:00+09:00",
+        source_type: "prototype" as const,
+      };
+    })
+  );
+  return [...countySnapshots, ...districtSnapshots];
+}
+
+export const foodSecurityMonthlySnapshots = buildFoodSecurityMonthlySnapshots();
+
 export function foodAvailabilityScore(metrics: ReturnType<typeof selectFoodSecurity>["aggregate"]) {
   if (!metrics || metrics.seasonNeedTon <= 0) return null;
   return Math.max(0, Math.min(100, metrics.balanceAvailabilityTon / metrics.seasonNeedTon * 100));
 }
 
-export function getFoodSecurityChartData(regionId = "93.01", validation = "all"): ChartDataPoint[] {
-  return ["MT1-2026", "MT2-2026"].flatMap((seasonId, index) => {
-    const aggregate = selectFoodSecurity(seasonId, regionId, validation).aggregate;
-    if (!aggregate) return [];
-    return [{
-      id: seasonId,
-      period: seasonId,
-      label: seasonId === "MT1-2026" ? "MT I 2026" : "MT II 2026",
-      stageIndex: index + 1,
-      target: aggregate.seasonNeedTon,
-      actual: aggregate.balanceAvailabilityTon,
-      projection: null,
-      status: "actual" as const,
-      isCutoff: false,
-    }];
-  });
+export function getFoodSecurityChartData(seasonId: string, regionId = "93.01", validation = "all"): ChartDataPoint[] {
+  const monthNames = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
+  const snapshots = buildFoodSecurityMonthlySnapshots(validation)
+    .filter(row => row.season_id === seasonId && row.region_id === regionId)
+    .sort((left, right) => left.stage_index - right.stage_index);
+  const lastActualStage = Math.max(0, ...snapshots.filter(row => row.status === "actual").map(row => row.stage_index));
+  return snapshots.map(row => ({
+    id: row.id,
+    period: row.period,
+    label: `${monthNames[Number(row.period.slice(5,7))-1]} ${row.period.slice(0,4)}`,
+    stageIndex: row.stage_index,
+    target: row.period_need_ton,
+    actual: row.status === "actual" ? row.availability_balance_ton : null,
+    projection: null,
+    status: row.status as ChartDataPoint["status"],
+    isCutoff: row.stage_index === lastActualStage,
+  }));
 }
 
 export function formatFoodValue(value: number | null, unit: "ton" | "hari" | "%" = "ton") {

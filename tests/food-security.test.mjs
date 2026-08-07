@@ -75,13 +75,66 @@ test("food security page keeps global filters and accessible modal contract", as
 });
 
 test("food availability chart uses seasonal selector results without invented projection", async () => {
-  const points = selector.getFoodSecurityChartData("93.01");
-  assert.deepEqual(points.map(point => point.label), ["MT I 2026", "MT II 2026"]);
-  assert.ok(points.every(point => point.actual > 0 && point.target > 0 && point.projection === null));
-  assert.equal(points[0].actual, selector.selectFoodSecurity("MT1-2026").aggregate.balanceAvailabilityTon);
-  assert.equal(points[1].target, selector.selectFoodSecurity("MT2-2026").aggregate.seasonNeedTon);
+  const mt1 = selector.getFoodSecurityChartData("MT1-2026", "93.01");
+  const mt2 = selector.getFoodSecurityChartData("MT2-2026", "93.01");
+  assert.deepEqual(mt1.map(point => point.label), ["Okt 2025","Nov 2025","Des 2025","Jan 2026","Feb 2026","Mar 2026"]);
+  assert.deepEqual(mt2.map(point => point.label), ["Apr 2026","Mei 2026","Jun 2026","Jul 2026","Agu 2026","Sep 2026"]);
+  assert.deepEqual(mt1.map(point => point.stageIndex),[1,2,3,4,5,6]);
+  assert.ok(mt1.every(point => point.actual !== null && point.projection === null));
+  assert.ok(mt2.slice(0,4).every(point => point.actual !== null));
+  assert.ok(mt2.slice(4).every(point => point.actual === null && point.projection === null));
+  assert.ok(Math.abs(mt1.at(-1).actual-selector.selectFoodSecurity("MT1-2026").aggregate.balanceAvailabilityTon)<1e-5);
+  assert.ok(Math.abs(mt2[3].target-selector.selectFoodSecurity("MT2-2026").aggregate.seasonNeedTon)<1e-5);
+  assert.ok(mt1.every(point => point.label !== "MT"));
   const page = await readFile("components/food-security/FoodSecurityPage.tsx", "utf8");
   assert.match(page, /MonitoringLineChart/);
   assert.match(page, /showSummaryStrip/);
   assert.doesNotMatch(page, /balance-bars/);
+});
+
+test("stock breakdown is canonical and never synthesized", () => {
+  const metrics=selector.selectFoodSecurity("MT2-2026").aggregate;
+  assert.equal(metrics.bulogStockTon+metrics.governmentReserveTon+metrics.localWarehouseStockTon,metrics.physicalStockTon);
+  assert.equal(metrics.physicalStockTon,10240);
+});
+
+test("monthly snapshots cover county and every monitored district with reconciled deterministic stages", () => {
+  const districtIds = ["93.01.01", "93.01.05", "93.01.06", "93.01.07", "93.01.11", "93.01.14"];
+  const scopeIds = ["93.01", ...districtIds];
+  const expectedPeriods = {
+    "MT1-2026": ["2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03"],
+    "MT2-2026": ["2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09"],
+  };
+  const snapshots = selector.foodSecurityMonthlySnapshots;
+  assert.equal(snapshots.length, 84);
+  assert.equal(new Set(snapshots.map(row => row.id)).size, snapshots.length);
+  for (const regionId of scopeIds) for (const seasonId of Object.keys(expectedPeriods)) {
+    const rows = snapshots.filter(row => row.region_id === regionId && row.season_id === seasonId);
+    assert.equal(rows.length, 6, `${regionId} ${seasonId}`);
+    assert.deepEqual(rows.map(row => row.period), expectedPeriods[seasonId]);
+    assert.deepEqual(rows.map(row => row.stage_index), [1, 2, 3, 4, 5, 6]);
+    assert.ok(rows.flatMap(row => [row.availability_balance_ton, row.period_need_ton, row.physical_stock_ton, row.surplus_deficit_ton]).every(value => value === null || Number.isFinite(value)));
+    const metrics = selector.selectFoodSecurity(seasonId, regionId).aggregate;
+    const cutoff = rows.filter(row => row.status === "actual").at(-1);
+    assert.ok(Math.abs(cutoff.physical_stock_ton - metrics.physicalStockTon) < 1e-8);
+    assert.ok(Math.abs(cutoff.availability_balance_ton - metrics.balanceAvailabilityTon) < 1e-8);
+    assert.ok(Math.abs(cutoff.period_need_ton - metrics.seasonNeedTon) < 1e-8);
+    assert.ok(Math.abs(cutoff.surplus_deficit_ton - metrics.surplusDeficitTon) < 1e-8);
+    assert.ok(rows.every(row => row.surplus_deficit_ton === null || Math.abs(row.surplus_deficit_ton - (row.availability_balance_ton - row.period_need_ton)) < 1e-8));
+    if (seasonId === "MT2-2026") {
+      assert.ok(rows.slice(0, 4).every(row => row.status === "actual"));
+      assert.ok(rows.slice(4).every(row => row.status === "not_available" && row.availability_balance_ton === null && row.period_need_ton === null && row.physical_stock_ton === null));
+    }
+  }
+  for (const seasonId of Object.keys(expectedPeriods)) for (let stage = 1; stage <= 6; stage++) {
+    const county = snapshots.find(row => row.region_id === "93.01" && row.season_id === seasonId && row.stage_index === stage);
+    const children = snapshots.filter(row => districtIds.includes(row.region_id) && row.season_id === seasonId && row.stage_index === stage);
+    for (const field of ["physical_stock_ton", "availability_balance_ton", "period_need_ton", "surplus_deficit_ton"]) {
+      if (county[field] === null) assert.ok(children.every(row => row[field] === null));
+      else assert.ok(Math.abs(county[field] - children.reduce((sum, row) => sum + row[field], 0)) < 1e-8);
+    }
+  }
+  assert.equal(selector.getFoodSecurityChartData("MT1-2026", "93.01.02").length, 0);
+  assert.notDeepEqual(selector.getFoodSecurityChartData("MT2-2026", districtIds[0]), selector.getFoodSecurityChartData("MT2-2026", districtIds[1]));
+  assert.doesNotMatch(source, /Math\.random|seededNumber/);
 });

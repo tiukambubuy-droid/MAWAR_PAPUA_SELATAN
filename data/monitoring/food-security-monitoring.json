@@ -4,6 +4,25 @@
     "source_type": "prototype",
     "scope": "Kabupaten Merauke — distrik terpantau",
     "official_index_status": "not_available",
+    "monthly_snapshot_contract": "Seri kumulatif simulasi dalam musim aktif dibentuk deterministik untuk enam distrik terpantau. Kabupaten Merauke selalu dihitung sebagai jumlah snapshot distrik, bukan sumber total terpisah.",
+    "monthly_snapshot_curve": {
+      "MT1-2026": [
+        {"period":"2025-10","stage_index":1,"status":"actual","allocation":0.18},
+        {"period":"2025-11","stage_index":2,"status":"actual","allocation":0.34},
+        {"period":"2025-12","stage_index":3,"status":"actual","allocation":0.51},
+        {"period":"2026-01","stage_index":4,"status":"actual","allocation":0.68},
+        {"period":"2026-02","stage_index":5,"status":"actual","allocation":0.84},
+        {"period":"2026-03","stage_index":6,"status":"actual","allocation":1}
+      ],
+      "MT2-2026": [
+        {"period":"2026-04","stage_index":1,"status":"actual","allocation":0.28},
+        {"period":"2026-05","stage_index":2,"status":"actual","allocation":0.52},
+        {"period":"2026-06","stage_index":3,"status":"actual","allocation":0.76},
+        {"period":"2026-07","stage_index":4,"status":"actual","allocation":1},
+        {"period":"2026-08","stage_index":5,"status":"not_available","allocation":null},
+        {"period":"2026-09","stage_index":6,"status":"not_available","allocation":null}
+      ]
+    },
     "source_references": [
       { "institution": "BPS", "document": "Referensi penduduk dan konsumsi", "year": 2026, "url": "https://meraukekab.bps.go.id", "verification_status": "reference_only" },
       { "institution": "Badan Pangan Nasional", "document": "Referensi FSVA, IKP, dan neraca pangan", "year": 2025, "url": "https://badanpangan.go.id", "verification_status": "reference_only" },

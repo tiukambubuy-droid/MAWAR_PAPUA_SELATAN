@@ -94,4 +94,7 @@ test("infrastructure UI includes complete filters, sortable semantics, paginatio
   const page = await readFile("components/infrastructure/InfrastructurePage.tsx", "utf8");
   for (const text of ["Semua Kondisi","Rusak Ringan","Rusak Berat","Semua Validasi","aria-sort","Halaman sebelumnya","Pemeriksaan terakhir","Toleransi rekonsiliasi","Persentase pemenuhan","Verifikasi terakhir"]) assert.match(page, new RegExp(text));
   assert.doesNotMatch(page, /\.local-filter\b/);
+  assert.match(page,/Wilayah belum dipantau/);
+  assert.match(page,/Tidak ada data sesuai filter/);
+  assert.match(page,/MapPinOff/);
 });
