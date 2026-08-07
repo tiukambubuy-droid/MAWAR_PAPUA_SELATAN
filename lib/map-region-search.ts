@@ -1,6 +1,11 @@
 import type { Region } from "@/lib/data-foundation";
 
 export type MapRegionOption = { id: string; name: string; typeLabel: "Kabupaten" | "Distrik" };
+export const REGION_SEPARATOR = "\u2014";
+
+export function formatMapRegionLabel(regionName: string, regionType: MapRegionOption["typeLabel"]) {
+  return `${regionName} ${REGION_SEPARATOR} ${regionType}`;
+}
 
 export function createMapRegionOptions(regions: Region[]): MapRegionOption[] {
   const regency = regions.find(region => region.id === "93.01" && region.administrative_type === "regency");

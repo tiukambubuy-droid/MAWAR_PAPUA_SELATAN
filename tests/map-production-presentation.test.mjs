@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 import ts from "typescript";
 
@@ -50,6 +50,29 @@ test("map search production selector derives one regency and 22 official distric
   assert.deepEqual(regionSearch.filterMapRegionOptions(options, "wilayah-tidak-ada"), []);
   assert.equal(regionSearch.districtIdForMapRegion(options.find(option => option.id === "93.01.05")), "93.01.05");
   assert.equal(regionSearch.districtIdForMapRegion(options.find(option => option.id === "93.01")), null);
+  assert.equal(regionSearch.formatMapRegionLabel("Muting", "Distrik"), "Muting \u2014 Distrik");
+  assert.equal(regionSearch.formatMapRegionLabel("Merauke", "Kabupaten"), "Merauke \u2014 Kabupaten");
+  assert.equal(regionSearch.formatMapRegionLabel("Semangga", "Distrik"), "Semangga \u2014 Distrik");
+  assert.doesNotMatch(regionSearch.formatMapRegionLabel("Muting", "Distrik"), /\u00c3|\u00e2\u20ac|\ufffd/u);
+});
+
+test("active source and production build contain no mojibake prefixes", async () => {
+  const mojibakePrefix = /\u00c3|\u00e2(?:\u20ac|\u0152)/u;
+  const replacementCharacter = /\ufffd/u;
+  const extensions = /\.(?:ts|tsx|js|mjs|css|html)$/;
+  const collect = async root => {
+    const entries = await readdir(root, { recursive: true, withFileTypes: true });
+    return entries.filter(entry => entry.isFile() && extensions.test(entry.name)).map(entry => `${entry.parentPath}/${entry.name}`);
+  };
+  const sourcePaths = (await Promise.all(["app", "components", "lib", "tests"].map(root => collect(root)))).flat();
+  const buildPaths = (await Promise.all([".next/server/app", ".next/static/chunks"].map(root => collect(root)))).flat();
+  const failures = [];
+  for (const path of sourcePaths) {
+    const contents = await readFile(path, "utf8");
+    if (mojibakePrefix.test(contents) || replacementCharacter.test(contents)) failures.push(path);
+  }
+  for (const path of buildPaths) if (mojibakePrefix.test(await readFile(path, "utf8"))) failures.push(path);
+  assert.deepEqual(failures, []);
 });
 
 test("actual chart builders keep MT I projection-free and MT II projected", () => {

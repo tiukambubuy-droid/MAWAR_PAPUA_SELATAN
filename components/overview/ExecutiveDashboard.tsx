@@ -26,6 +26,7 @@ import { MonitoringLineChart } from "@/components/ui/MonitoringLineChart";
 import { fitToBounds } from "@/lib/visualization";
 import { createBigMapRequestController, createBigMapViewCallbacks, reduceBigMapViewState, type BigMapRequestController, type BigMapViewState } from "@/lib/big-map-request-controller";
 import { displayedExecutiveRegionId } from "@/lib/executive-map-interaction";
+import { formatMapRegionLabel } from "@/lib/map-region-search";
 
 type PageName = "Peta Lahan" | "Musim Tanam" | "Produksi";
 
@@ -252,7 +253,7 @@ function ExecutiveBigMap({ selectedRegionId, selectedLabel, hint, onSelect }: { 
         </g>)}
       </g>
     </svg> : mapState.status === "error" ? <div className="executive-map-error" role="status"><strong>Peta pratinjau belum tersedia.</strong><span>Buka Peta Lahan melalui Lihat Detail untuk pemantauan lengkap.</span></div> : <div className="executive-map-loading" role="status">Memuat peta BIG…</div>}</div>
-    {model.length > 0 && visibleName && <div className="executive-map-region-tooltip" role="status">{visibleName} <span>â€” Distrik</span></div>}
+    {model.length > 0 && visibleName && <div className="executive-map-region-tooltip" role="status">{formatMapRegionLabel(visibleName, "Distrik")}</div>}
     <div className="executive-map-footer">
       <div className="executive-map-source"><span>◉</span> Badan Informasi Geospasial · WGS 84 · {mapState.sourceMode === "fallback" ? "cadangan BIG" : "BIG"}</div>
       <div className="map-selection"><MapPin size={19}/><span><b>{selectedLabel}</b><small>{hint}</small></span></div>

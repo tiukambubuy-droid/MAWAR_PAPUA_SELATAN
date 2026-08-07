@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
+import { ChevronDown, Search, X } from "lucide-react";
 import SeasonCommandCenter from "@/components/season/SeasonPage";
 import ProductionCommandCenter from "@/components/production/ProductionPage";
 import ExecutiveDashboard from "@/components/overview/ExecutiveDashboard";
@@ -21,7 +22,7 @@ import { createBigMapRequestController, createBigMapViewCallbacks, reduceBigMapV
 import { phaseColors, reduceMapBreadcrumb, riskColors, selectPhaseMonitoring, selectRiskMonitoring } from "@/lib/map-monitoring";
 import { defineLandMetric, formatPresentationValue, getValidationSummary, resolveTableRegionNames } from "@/lib/presentation-selectors";
 import { clampPan, clampZoom, fitToBounds, isMapDrag, prioritizedMapLabels, resetMapCamera } from "@/lib/visualization";
-import { createMapRegionOptions, districtIdForMapRegion, filterMapRegionOptions } from "@/lib/map-region-search";
+import { createMapRegionOptions, districtIdForMapRegion, filterMapRegionOptions, formatMapRegionLabel, REGION_SEPARATOR } from "@/lib/map-region-search";
 
 const activeRegionCounts = getActiveMonitoringRegionCounts();
 const canonicalDistrictNames = regions
@@ -652,7 +653,7 @@ function LandPage() {
     return { scope, phase, risk };
   }, [filters.seasonId, mapContext]);
   const activeMapRegion = filters.districtId ? getRegionById(filters.districtId) : null;
-  const regionQuery = regionDraft ?? (activeMapRegion ? `${activeMapRegion.name} â€” Distrik` : "Merauke â€” Kabupaten");
+  const regionQuery = regionDraft ?? formatMapRegionLabel(activeMapRegion?.name ?? "Merauke", activeMapRegion ? "Distrik" : "Kabupaten");
   const matchingMapRegions = useMemo(() => {
     const query = regionQuery.trim().toLocaleLowerCase("id-ID");
     return filterMapRegionOptions(mapRegionOptions, query);
@@ -842,8 +843,8 @@ function LandPage() {
           <div className="map-region-search" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setRegionSearchOpen(false); }}>
             <label htmlFor="map-region-query">Cari wilayah pada peta</label>
             <div className="map-region-search-field">
-              <span aria-hidden="true">âŒ•</span>
-              <input id="map-region-query" value={regionQuery} placeholder="Cari kabupaten atau distrikâ€¦" autoComplete="off"
+              <Search className="map-region-search-icon" size={17} aria-hidden="true" />
+              <input id="map-region-query" value={regionQuery} placeholder="Cari kabupaten atau distrik..." autoComplete="off"
                 role="combobox" aria-autocomplete="list" aria-expanded={regionSearchOpen} aria-controls="map-region-options"
                 aria-activedescendant={regionSearchOpen && matchingMapRegions[regionActiveIndex] ? `map-region-${matchingMapRegions[regionActiveIndex].id}` : undefined}
                 onFocus={() => setRegionSearchOpen(true)} onChange={event => { setRegionDraft(event.target.value); setRegionSearchOpen(true); setRegionActiveIndex(0); }}
@@ -853,13 +854,16 @@ function LandPage() {
                   if (event.key === "ArrowUp") { event.preventDefault(); setRegionActiveIndex(index => Math.max(0, index - 1)); }
                   if (event.key === "Enter" && matchingMapRegions[regionActiveIndex]) { event.preventDefault(); chooseMapRegion(matchingMapRegions[regionActiveIndex]); }
                 }} />
-              {regionQuery && <button type="button" aria-label="Hapus pencarian wilayah" onClick={() => { setRegionDraft(""); setRegionSearchOpen(true); setRegionActiveIndex(0); }}>Ã—</button>}
+              <div className="map-region-search-actions">
+                {regionQuery && <button type="button" aria-label="Hapus pencarian wilayah" onClick={() => { setRegionDraft(""); setRegionSearchOpen(true); setRegionActiveIndex(0); }}><X size={16} aria-hidden="true" /></button>}
+                <ChevronDown className="map-region-chevron" size={17} aria-hidden="true" />
+              </div>
             </div>
             {regionSearchOpen && <div id="map-region-options" className="map-region-options" role="listbox" aria-label="Wilayah Kabupaten Merauke">
               {matchingMapRegions.length ? matchingMapRegions.map((option, index) => <button type="button" id={`map-region-${option.id}`} key={option.id} role="option"
                 aria-selected={option.typeLabel === "Kabupaten" ? !filters.districtId : filters.districtId === option.id}
                 className={index === regionActiveIndex ? "active" : ""} onMouseDown={event => event.preventDefault()} onMouseEnter={() => setRegionActiveIndex(index)} onClick={() => chooseMapRegion(option)}>
-                <strong>{option.name}</strong><span>â€” {option.typeLabel}</span>
+                <strong>{option.name}</strong><span><span aria-hidden="true">{REGION_SEPARATOR}</span> {option.typeLabel}</span>
               </button>) : <p role="status">Wilayah tidak ditemukan.</p>}
             </div>}
           </div>
