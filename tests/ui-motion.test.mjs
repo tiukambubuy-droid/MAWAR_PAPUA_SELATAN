@@ -81,7 +81,7 @@ test("rendemen standard remains visible and unchanged", async () => {
 });
 
 test("responsive navigation retains meaningful accessible names and current page state", () => {
-  assert.match(appPage, /aria-label=\{`Buka halaman \$\{label\}`\}/);
+  assert.match(appPage, /`Buka halaman \$\{label\}`/);
   assert.match(appPage, /aria-current=\{activeNav === label \? "page" : undefined\}/);
   assert.match(appPage, /<span aria-hidden="true"><Icon size=\{21\} \/><\/span>/);
   for (const label of ["Ringkasan", "Peta Lahan", "Musim Tanam", "Produksi", "Ketahanan Pangan", "Risiko", "Laporan"]) {

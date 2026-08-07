@@ -6,6 +6,7 @@ import { useDashboardFilters } from "@/components/DashboardFilterProvider";
 import { useAccessibleModal } from "@/components/ui/useAccessibleModal";
 import { getRegionById, regions } from "@/lib/data-foundation";
 import { foodAvailabilityScore, formatFoodValue, resilienceDisclaimer, resilienceWeights, selectFoodSecurity, type FoodSecurityMetrics } from "@/lib/food-security-data";
+import { selectOperationalResilience } from "@/lib/resilience-data";
 
 const districts = regions.filter(region => region.parent_id === "93.01" && region.administrative_type === "district");
 
@@ -33,6 +34,7 @@ export default function FoodSecurityPage() {
   const [detail, setDetail] = useState<FoodSecurityMetrics | null>(null);
   const selected = useMemo(() => selectFoodSecurity(filters.seasonId, filters.districtId ?? "93.01", validation), [filters.seasonId, filters.districtId, validation]);
   const metrics = selected.aggregate;
+  const resilience = useMemo(() => selectOperationalResilience(filters.seasonId, filters.districtId ?? "93.01"), [filters.seasonId, filters.districtId]);
   const availability = foodAvailabilityScore(metrics);
   const production = metrics?.estimatedRiceProductionTon ?? null;
   const need = metrics?.seasonNeedTon ?? null;
@@ -41,8 +43,8 @@ export default function FoodSecurityPage() {
   const resilienceComponents = [
     ["Ketersediaan", availability, resilienceWeights.availability],
     ["Capaian produksi", productionAchievement, resilienceWeights.productionAchievement],
-    ["Kesiapan irigasi", null, resilienceWeights.irrigationReadiness],
-    ["Pemenuhan sarana", null, resilienceWeights.productionInputFulfillment],
+    ["Kesiapan irigasi", resilience.components.irrigationReadiness, resilienceWeights.irrigationReadiness],
+    ["Pemenuhan sarana", resilience.components.productionInputFulfillment, resilienceWeights.productionInputFulfillment],
     ["Validasi", validationScore, resilienceWeights.validation],
   ] as const;
   const kpis = [
@@ -51,7 +53,7 @@ export default function FoodSecurityPage() {
     ["Kebutuhan Periode", metrics?.seasonNeedTon ?? null, "ton"],
     ["Surplus/Defisit", metrics?.surplusDeficitTon ?? null, "ton"],
     ["Ketahanan Stok", metrics?.stockResilienceDays ?? null, "hari"],
-    ["Indikator Resiliensi", null, "%"],
+    ["Indikator Resiliensi", resilience.score, "%"],
   ] as const;
   return <div className="monitoring-page food-security-page">
     <header className="monitoring-heading"><div><span>SIMULASI PROTOTIPE · KABUPATEN MERAUKE</span><h1>KETAHANAN PANGAN</h1><p>Pemantauan Ketersediaan, Kebutuhan, dan Resiliensi Pangan</p></div><ShieldCheck size={34} aria-hidden="true" /></header>
@@ -62,12 +64,12 @@ export default function FoodSecurityPage() {
       <label>Status data<select value={validation} onChange={event => setValidation(event.target.value)}><option value="all">Semua</option><option value="approved">Disetujui</option><option value="pending">Menunggu validasi</option></select></label>
     </section>
     {!selected.monitored ? <div className="monitoring-empty" role="status">{filters.districtId && getRegionById(filters.districtId)?.monitoring_status !== "active" ? "Belum dipantau" : "Belum tersedia"}</div> : <>
-      <section className="monitoring-kpis">{kpis.map(([label, value, unit], index) => <article key={label}><i>{index < 3 ? <Warehouse size={20}/> : <ArrowDownUp size={20}/>}</i><span>{label}</span><strong>{index === 5 ? "Sementara" : formatFoodValue(value, unit)}</strong>{index === 5 && <small>Menunggu integrasi irigasi dan sarana</small>}</article>)}</section>
+      <section className="monitoring-kpis">{kpis.map(([label, value, unit], index) => <article key={label}><i>{index < 3 ? <Warehouse size={20}/> : <ArrowDownUp size={20}/>}</i><span>{label}</span><strong>{formatFoodValue(value, unit)}</strong>{index === 5 && <small>{resilience.complete ? "Lima komponen tersedia" : "Komponen wajib belum lengkap"}</small>}</article>)}</section>
       <section className="monitoring-grid two">
         <article className="monitoring-card"><h2>Ketersediaan vs Kebutuhan</h2><div className="balance-bars" role="img" aria-label="Perbandingan ketersediaan dan kebutuhan pangan"><span>Ketersediaan<b style={{width:`${Math.min(100, (metrics!.balanceAvailabilityTon / Math.max(metrics!.balanceAvailabilityTon, metrics!.seasonNeedTon)) * 100)}%`}}/></span><strong>{formatFoodValue(metrics!.balanceAvailabilityTon)}</strong><span>Kebutuhan<b className="need" style={{width:`${Math.min(100, (metrics!.seasonNeedTon / Math.max(metrics!.balanceAvailabilityTon, metrics!.seasonNeedTon)) * 100)}%`}}/></span><strong>{formatFoodValue(metrics!.seasonNeedTon)}</strong></div></article>
         <article className="monitoring-card"><h2>Komposisi Stok</h2><div className="stock-composition"><Archive size={34}/><strong>{formatFoodValue(metrics!.physicalStockTon)}</strong><p>Bulog, cadangan pemerintah, dan gudang lokal.</p></div></article>
       </section>
-      <section className="monitoring-card resilience-card"><h2>Resiliensi Pangan</h2><p className="simulation-disclaimer">{resilienceDisclaimer}</p><div>{resilienceComponents.map(([label, score, weight]) => <span key={label}><b>{label}</b><i>{score === null ? "Belum tersedia" : `${score.toLocaleString("id-ID", {maximumFractionDigits:1})}%`}</i><small>Bobot {weight * 100}%</small></span>)}</div><p>IKP/FSVA resmi: <b>Belum tersedia</b>. Skor final belum dihitung sampai komponen wajib tersedia.</p></section>
+      <section className="monitoring-card resilience-card"><h2>Resiliensi Pangan</h2><p className="simulation-disclaimer">{resilienceDisclaimer}</p><div>{resilienceComponents.map(([label, score, weight]) => <span key={label}><b>{label}</b><i>{score === null ? "Belum tersedia" : `${score.toLocaleString("id-ID", {maximumFractionDigits:1})}%`}</i><small>Bobot {weight * 100}%</small></span>)}</div><p>IKP/FSVA resmi: <b>Belum tersedia</b>. {resilience.complete ? "Skor simulasi dihitung dari lima komponen aktual." : "Skor final belum dihitung sampai komponen wajib tersedia."}</p></section>
       <section className="monitoring-card monitoring-table"><h2>Rekap per Distrik</h2><div className="table-scroll"><table><thead><tr><th>Wilayah</th><th>Stok</th><th>Produksi Beras</th><th>Kebutuhan</th><th>Surplus/Defisit</th><th>Ketahanan</th><th>Validasi</th><th>Detail</th></tr></thead><tbody>{selected.items.map(item => <tr key={item.record.id}><td>{getRegionById(item.record.region_id)?.name}</td><td>{formatFoodValue(item.physicalStockTon)}</td><td>{formatFoodValue(item.estimatedRiceProductionTon)}</td><td>{formatFoodValue(item.seasonNeedTon)}</td><td>{formatFoodValue(item.surplusDeficitTon)}</td><td>{formatFoodValue(item.stockResilienceDays,"hari")}</td><td>{item.record.validation_status}</td><td><button onClick={() => setDetail(item)} aria-label={`Buka detail ${getRegionById(item.record.region_id)?.name}`}>Detail</button></td></tr>)}</tbody></table></div></section>
       <section className="monitoring-card monitoring-insight"><h2>Insight berbasis aturan</h2><p>{metrics!.surplusDeficitTon >= 0 ? "Neraca simulasi menunjukkan surplus pada cakupan terpilih." : "Neraca simulasi menunjukkan defisit pada cakupan terpilih."}</p><small>Insight otomatis berbasis atribut tersedia, bukan AI generatif.</small></section>
     </>}

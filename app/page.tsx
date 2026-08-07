@@ -4,11 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
-import { BarChart3, ChevronDown, CloudSun, FileText, LayoutDashboard, Map, Search, ShieldCheck, Sprout, X } from "lucide-react";
+import { BarChart3, ChevronDown, CloudSun, FileText, LayoutDashboard, Map, Search, ShieldCheck, Sprout, Wrench, X } from "lucide-react";
 import SeasonCommandCenter from "@/components/season/SeasonPage";
 import ProductionCommandCenter from "@/components/production/ProductionPage";
 import ExecutiveDashboard from "@/components/overview/ExecutiveDashboard";
 import FoodSecurityPage from "@/components/food-security/FoodSecurityPage";
+import InfrastructurePage from "@/components/infrastructure/InfrastructurePage";
 import { DashboardFilterProvider, useDashboardFilters } from "@/components/DashboardFilterProvider";
 import {
   aggregateRegion,
@@ -38,6 +39,7 @@ const nav = [
   { Icon: Sprout, label: "Musim Tanam", enabled: true },
   { Icon: BarChart3, label: "Produksi", enabled: true },
   { Icon: ShieldCheck, label: "Ketahanan Pangan", enabled: true },
+  { Icon: Wrench, label: "Infrastruktur & Sarana", enabled: true },
   { Icon: CloudSun, label: "Risiko & Iklim", enabled: false },
   { Icon: FileText, label: "Laporan", enabled: false },
 ];
@@ -971,7 +973,7 @@ function HomeContent() {
               key={label}
               className={activeNav === label ? "nav-item active" : "nav-item"}
               onClick={() => enabled && setActiveNav(label)}
-              aria-label={`Buka halaman ${label}`}
+              aria-label={label === "Infrastruktur & Sarana" ? "Buka halaman Infrastruktur dan Sarana" : `Buka halaman ${label}`}
               aria-current={activeNav === label ? "page" : undefined}
               aria-disabled={!enabled}
             >
@@ -1011,6 +1013,7 @@ function HomeContent() {
           {activeNav === "Musim Tanam" && <SeasonPage />}
           {activeNav === "Produksi" && <ProductionPage />}
           {activeNav === "Ketahanan Pangan" && <FoodSecurityPage />}
+          {activeNav === "Infrastruktur & Sarana" && <InfrastructurePage />}
 
           <footer><span>Data pada prototipe bersifat simulasi dan perlu divalidasi sebelum digunakan sebagai dasar kebijakan.</span><strong>© 2026 Pemerintah Provinsi Papua Selatan</strong></footer>
         </div>
