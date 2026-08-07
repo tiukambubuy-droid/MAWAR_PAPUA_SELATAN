@@ -10,7 +10,7 @@ export function SeasonProgressChart({ months, active, title, seasonId, scale }: 
   const selectedActual = selected?.actual ?? 0;
   return <article className="card season-line-card">
     <div className="season-section-title">PERKEMBANGAN REALISASI TANAM — {title.toUpperCase()}</div>
-    <MonitoringLineChart data={data} unit="ha" selectedId={selected?.id} ariaLabel="Grafik perkembangan realisasi tanam" />
+    <MonitoringLineChart data={data} unit="ha" selectedId={selected?.id} ariaLabel="Grafik perkembangan realisasi tanam" showSummaryStrip summaryStatus={seasonId === "MT1-2026" ? "completed" : "in_progress"} showPersistentValueLabels={false} />
     <div className="season-chart-note">◉ Capaian hingga {selected?.label}: <strong>{formatPercentId(selected?.target ? selectedActual / selected.target * 100 : 0)}</strong> dari target kumulatif</div>
   </article>;
 }

@@ -16,6 +16,41 @@ const points = [
   { id: "c", label: "Jun 2026", stageIndex: 3, target: 30, actual: null, projection: 27, status: "projection", isCutoff: false },
 ];
 
+test("chart summary distinguishes completed and running seasons using finite production data", () => {
+  const completed = visual.chartSummaryItems([
+    { ...points[0], actual: 0, isCutoff: false },
+    { ...points[1], actual: 18, isCutoff: false },
+    { ...points[2], actual: 27, projection: null, isCutoff: true },
+  ], "completed");
+  assert.deepEqual(completed, [
+    { field: "actual", label: "Realisasi akhir", value: 27 },
+    { field: "target", label: "Target akhir", value: 30 },
+  ]);
+
+  const running = visual.chartSummaryItems(points, "in_progress");
+  assert.deepEqual(running, [
+    { field: "actual", label: "Realisasi cut-off", value: 18 },
+    { field: "target", label: "Target akhir", value: 30 },
+    { field: "projection", label: "Proyeksi akhir", value: 27 },
+  ]);
+});
+
+test("chart summary rejects invalid values, retains verified zero, and exposes unavailable state", () => {
+  const invalid = [
+    { ...points[0], actual: 0, target: Number.NaN, projection: null, isCutoff: true },
+    { ...points[1], actual: Number.POSITIVE_INFINITY, target: Number.NEGATIVE_INFINITY, projection: Number.NaN, isCutoff: false },
+  ];
+  assert.deepEqual(visual.chartSummaryItems(invalid, "in_progress"), [
+    { field: "actual", label: "Realisasi cut-off", value: 0 },
+    { field: "target", label: "Target akhir", value: null },
+    { field: "projection", label: "Proyeksi akhir", value: null },
+  ]);
+  assert.deepEqual(visual.chartSummaryItems([], "completed"), [
+    { field: "actual", label: "Realisasi akhir", value: null },
+    { field: "target", label: "Target akhir", value: null },
+  ]);
+});
+
 test("fit-to-bounds centers geometry within deterministic padded viewport", () => {
   const camera = visual.fitToBounds([[0, 0], [100, 50]], 900, 480, 30);
   assert.equal(camera.scale, 8.4);

@@ -11,8 +11,8 @@
 .monitoring-chart-production{padding:12px 14px 6px}
 .monitoring-chart-production .monitoring-chart-legend{font-size:12px;line-height:1.4}
 .monitoring-chart-production .monitoring-chart-legend em{font-size:12px}
-.monitoring-chart-production .chart-axis-row text,.monitoring-chart-production .chart-x-label{font-size:11px}
-.monitoring-chart-production .chart-cutoff text{font-size:11.5px}
+.monitoring-chart-production .chart-axis-row text,.monitoring-chart-production .chart-x-label{font-size:14px}
+.monitoring-chart-production .chart-cutoff text{font-size:14px}
 .monitoring-chart-production .chart-value-label{font-size:12px}
 .monitoring-chart-production .monitoring-chart-tooltip{width:188px;padding:13px 14px;gap:7px;font-size:12px;line-height:1.4}
 .monitoring-chart-production .monitoring-chart-tooltip>strong{font-size:13px}

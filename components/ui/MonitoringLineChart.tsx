@@ -2,19 +2,22 @@
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChartDataPoint } from "@/lib/chart-data";
-import { chartDomain, chartSeries, chartValueLabels, formatCompactId, positionChartValueLabels, type ChartCollisionRect } from "@/lib/visualization";
+import { chartDomain, chartSeries, chartSummaryItems, chartValueLabels, formatCompactId, positionChartValueLabels, type ChartCollisionRect } from "@/lib/visualization";
 
 type Series = "target" | "actual" | "projection";
 
-export function MonitoringLineChart({ data, unit, ariaLabel, selectedId, showPersistentValueLabels = true, presentation = "default" }: {
+export function MonitoringLineChart({ data, unit, ariaLabel, selectedId, showSummaryStrip = false, summaryStatus, showPersistentValueLabels = true, presentation = "default" }: {
   data: ChartDataPoint[];
   unit: "ha" | "ton";
   ariaLabel: string;
   selectedId?: string;
+  showSummaryStrip?: boolean;
+  summaryStatus?: "completed" | "in_progress";
   showPersistentValueLabels?: boolean;
   presentation?: "default" | "production";
 }) {
-  const [activeId, setActiveId] = useState<string | null>(showPersistentValueLabels ? selectedId ?? data.find(point => point.isCutoff)?.id ?? null : null);
+  const renderPersistentValueLabels = showPersistentValueLabels && !showSummaryStrip;
+  const [activeId, setActiveId] = useState<string | null>(renderPersistentValueLabels ? selectedId ?? data.find(point => point.isCutoff)?.id ?? null : null);
   const [tooltipExclusion, setTooltipExclusion] = useState<ChartCollisionRect | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -29,7 +32,8 @@ export function MonitoringLineChart({ data, unit, ariaLabel, selectedId, showPer
   const cutoff = data.find(point => point.isCutoff);
   const ticks = Array.from({ length: 5 }, (_, index) => domain.max * index / 4);
   const importantValues = chartValueLabels(data);
-  const valueLabels = showPersistentValueLabels ? positionChartValueLabels(importantValues.map(label => ({
+  const summaryItems = useMemo(() => chartSummaryItems(data, summaryStatus), [data, summaryStatus]);
+  const valueLabels = renderPersistentValueLabels ? positionChartValueLabels(importantValues.map(label => ({
     ...label,
     text: `${label.field === "actual" ? "Realisasi" : label.field === "target" ? "Target" : "Proyeksi"} ${formatCompactId(label.value)} ${unit}`,
     anchorX: x(label.point.stageIndex - 1),
@@ -66,9 +70,18 @@ export function MonitoringLineChart({ data, unit, ariaLabel, selectedId, showPer
     return () => { cancelAnimationFrame(frame); window.removeEventListener("resize", measure); };
   }, [activeId]);
 
-  if (!data.length) return <div className="monitoring-chart-empty" role="status">Tidak ada data sesuai filter.</div>;
+  const summaryStrip = showSummaryStrip ? <dl className={`monitoring-chart-summary count-${summaryItems.length}`} aria-label="Ringkasan nilai grafik">
+    {summaryItems.map(item => <div className={`monitoring-chart-summary-item ${item.field}`} key={item.field}>
+      <i aria-hidden="true" />
+      <dt>{item.label}</dt>
+      <dd>{item.value === null ? "Belum tersedia" : `${item.value.toLocaleString("id-ID")} ${unit}`}</dd>
+    </div>)}
+  </dl> : null;
+
+  if (!data.length) return <div className="monitoring-chart" data-presentation={presentation}>{summaryStrip}<div className="monitoring-chart-empty" role="status">Tidak ada data sesuai filter.</div></div>;
 
   return <div className={`monitoring-chart ${presentation === "production" ? "monitoring-chart-production" : ""}`} data-reduced-motion="supported" data-presentation={presentation}>
+    {summaryStrip}
     <div className="monitoring-chart-legend" aria-label="Legenda grafik">
       {availableSeries.map(field => <span key={field} className={field}><i />{field === "target" ? "Target" : field === "actual" ? "Realisasi" : "Proyeksi"}</span>)}
       <em>Satuan: {unit}</em>
@@ -107,6 +120,6 @@ export function MonitoringLineChart({ data, unit, ariaLabel, selectedId, showPer
         {active.isCutoff && <em>Cut-off data</em>}
       </div>}
     </div>
-    <p className="sr-only">{importantValues.map(label => `${label.field === "actual" ? "Realisasi pada cut-off" : label.field === "target" ? "Target akhir" : "Proyeksi akhir"} ${label.value.toLocaleString("id-ID")} ${unit}.`).join(" ")}</p>
+    {!showSummaryStrip && <p className="sr-only">{importantValues.map(label => `${label.field === "actual" ? "Realisasi pada cut-off" : label.field === "target" ? "Target akhir" : "Proyeksi akhir"} ${label.value.toLocaleString("id-ID")} ${unit}.`).join(" ")}</p>}
   </div>;
 }

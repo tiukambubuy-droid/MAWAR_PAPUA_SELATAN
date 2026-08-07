@@ -76,6 +76,28 @@ export type ChartValueLabel = {
   value: number;
 };
 
+export type ChartSummaryItem = {
+  field: "actual" | "target" | "projection";
+  label: "Realisasi cut-off" | "Realisasi akhir" | "Target akhir" | "Proyeksi akhir";
+  value: number | null;
+};
+
+export function chartSummaryItems(data: ChartDataPoint[], seasonStatus?: "completed" | "in_progress"): ChartSummaryItem[] {
+  const finite = (value: number | null | undefined): value is number => typeof value === "number" && Number.isFinite(value);
+  const latest = (field: "actual" | "target" | "projection", predicate: (point: ChartDataPoint) => boolean = () => true) =>
+    data.filter(point => predicate(point) && finite(point[field]))
+      .reduce<ChartDataPoint | null>((result, point) => !result || point.stageIndex > result.stageIndex ? point : result, null);
+  const ongoing = seasonStatus ? seasonStatus === "in_progress" : data.some(point => finite(point.projection));
+  const actualPoint = ongoing ? latest("actual", point => point.isCutoff) : latest("actual");
+  const targetPoint = latest("target");
+  const projectionPoint = ongoing ? latest("projection") : null;
+  return [
+    { field: "actual", label: ongoing ? "Realisasi cut-off" : "Realisasi akhir", value: actualPoint && finite(actualPoint.actual) ? actualPoint.actual : null },
+    { field: "target", label: "Target akhir", value: targetPoint && finite(targetPoint.target) ? targetPoint.target : null },
+    ...(ongoing ? [{ field: "projection" as const, label: "Proyeksi akhir" as const, value: projectionPoint && finite(projectionPoint.projection) ? projectionPoint.projection : null }] : []),
+  ];
+}
+
 export function chartValueLabels(data: ChartDataPoint[]): ChartValueLabel[] {
   const byLastStage = (field: "target" | "actual" | "projection", cutoffOnly = false) => data
     .filter(point => (!cutoffOnly || point.isCutoff) && Number.isFinite(point[field]))

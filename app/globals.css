@@ -323,18 +323,24 @@ footer{display:flex;justify-content:space-between;gap:20px;padding:13px 2px 0;fo
 .executive-big-layer path{cursor:pointer;transition:filter var(--motion-fast,180ms) ease;stroke:#fff;stroke-width:1.2}
 .executive-big-layer g:hover path,.executive-big-layer g.selected path{filter:brightness(.88);stroke:#075a3e;stroke-width:2}
 
-.monitoring-chart{min-height:350px;display:flex;flex-direction:column;padding:10px 14px 4px;box-sizing:border-box}
-.monitoring-chart-legend{display:flex;align-items:center;flex-wrap:wrap;gap:10px 22px;min-height:34px;color:#51675e;font-size:10px}
+.monitoring-chart{container-type:inline-size;min-height:350px;display:flex;flex-direction:column;padding:10px 14px 4px;box-sizing:border-box}
+.monitoring-chart-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:2px 0 8px;padding:8px 14px;min-height:54px;box-sizing:border-box;border:1px solid #d9e9e1;border-radius:10px;background:#f3faf6}
+.monitoring-chart-summary.count-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.monitoring-chart-summary-item{position:relative;display:grid;grid-template-columns:30px minmax(0,1fr);grid-template-rows:auto auto;column-gap:9px;align-content:center;min-width:0}
+.monitoring-chart-summary-item i{grid-row:1/3;align-self:center;width:26px;border-top:3px solid #087f58}
+.monitoring-chart-summary-item.target i{border-color:#65746e;border-top-style:dashed}.monitoring-chart-summary-item.projection i{border-color:#33ad7d;border-top-style:dashed}
+.monitoring-chart-summary dt{font-size:12px;line-height:1.3;color:#5c7067;white-space:nowrap}.monitoring-chart-summary dd{margin:0;font-size:14px;line-height:1.3;font-weight:700;color:#173f32;white-space:nowrap}
+.monitoring-chart-legend{display:flex;align-items:center;flex-wrap:wrap;gap:10px 22px;min-height:34px;color:#51675e;font-size:12px;line-height:1.35}
 .monitoring-chart-legend span{display:inline-flex;align-items:center;gap:7px}
 .monitoring-chart-legend i{display:inline-block;width:28px;border-top:3px solid}
 .monitoring-chart-legend .target i{border-color:#65746e;border-top-style:dashed}
 .monitoring-chart-legend .actual i{border-color:#087f58}
 .monitoring-chart-legend .projection i{border-color:#33ad7d;border-top-style:dashed}
-.monitoring-chart-legend em{margin-left:auto;font-size:9px;font-style:normal;color:#75867e}
+.monitoring-chart-legend em{margin-left:auto;font-size:12px;font-style:normal;color:#75867e}
 .monitoring-chart-stage{position:relative;flex:1;min-height:292px}
 .monitoring-chart-stage svg{display:block;width:100%!important;height:100%!important;min-height:292px;padding:0!important;overflow:visible}
 .chart-axis-row line{stroke:#dde7e2;stroke-width:1}
-.chart-axis-row text,.chart-x-label{fill:#65776f;font-size:11px}
+.chart-axis-row text,.chart-x-label{fill:#65776f;font-size:14px}
 .chart-series{fill:none;vector-effect:non-scaling-stroke;stroke-linecap:round;stroke-linejoin:round;animation:chartReveal var(--motion-slow,420ms) ease both}
 .chart-series.target{stroke:#65746e;stroke-width:2;stroke-dasharray:8 6}
 .chart-series.actual{stroke:#087f58;stroke-width:4}
@@ -343,20 +349,21 @@ footer{display:flex;justify-content:space-between;gap:20px;padding:13px 2px 0;fo
 .chart-point.actual{fill:#087f58}.chart-point.projection{fill:#fff;stroke:#33ad7d;stroke-width:3}
 .chart-point:focus{stroke:#173f32;stroke-width:3}
 .chart-cutoff line{stroke:#7cae9a;stroke-width:1.5;stroke-dasharray:4 4}
-.chart-cutoff text{fill:#39705d;font-size:10px;font-weight:800}
+.chart-cutoff text{fill:#39705d;font-size:14px;font-weight:700}
 .chart-value-label{font-size:10px;font-weight:800;pointer-events:none}
 .chart-value-label rect{fill:#fffffff2;stroke-width:1.2;vector-effect:non-scaling-stroke}
 .chart-value-label text{stroke:none}.chart-value-label.target{fill:#52615b}.chart-value-label.target rect{stroke:#65746e}
 .chart-value-label.actual{fill:#076c4c}.chart-value-label.actual rect{stroke:#087f58}
 .chart-value-label.projection{fill:#22815f}.chart-value-label.projection rect{stroke:#33ad7d}
-.monitoring-chart-tooltip{position:absolute;z-index:3;width:154px;pointer-events:none;transform:translate(12px,-50%);border-radius:9px;background:#064a38f2;color:#fff;padding:10px 11px;box-shadow:0 8px 22px #123f312b;display:flex;flex-direction:column;gap:5px;font-size:9px}
+.monitoring-chart-tooltip{position:absolute;z-index:3;width:174px;pointer-events:none;transform:translate(12px,-50%);border-radius:9px;background:#064a38f2;color:#fff;padding:11px 12px;box-shadow:0 8px 22px #123f312b;display:flex;flex-direction:column;gap:6px;font-size:12px;line-height:1.4}
 .monitoring-chart-tooltip.align-left{transform:translate(calc(-100% - 12px),-50%)}
 .monitoring-chart-tooltip.tooltip-corner-left{left:4px;right:auto;top:7px;transform:none}
 .monitoring-chart-tooltip.tooltip-corner-right{left:auto;right:4px;top:7px;transform:none}
-.monitoring-chart-tooltip strong{font-size:11px}.monitoring-chart-tooltip span{display:flex;justify-content:space-between;gap:8px;color:#cbe9dd}.monitoring-chart-tooltip b{color:#fff;white-space:nowrap}.monitoring-chart-tooltip em{font-style:normal;color:#f3cf69;font-weight:800}
+.monitoring-chart-tooltip strong{font-size:13px}.monitoring-chart-tooltip span{display:flex;justify-content:space-between;gap:8px;color:#cbe9dd;font-size:12px}.monitoring-chart-tooltip b{color:#fff;white-space:nowrap;font-size:13px}.monitoring-chart-tooltip em{font-style:normal;color:#f3cf69;font-weight:800}
 .monitoring-chart-empty{min-height:320px;display:grid;place-items:center;color:#71827a;font-size:11px}
 .executive-chart{min-height:410px}.executive-chart .monitoring-chart{min-height:360px}
 .production-trend .monitoring-chart,.season-line-card .monitoring-chart{min-height:390px}
+.season-chart-note{font-size:12.5px;line-height:1.4}
 @keyframes chartReveal{from{opacity:0;stroke-dashoffset:22}to{opacity:1;stroke-dashoffset:0}}
 
 @media(max-width:760px){
@@ -364,10 +371,14 @@ footer{display:flex;justify-content:space-between;gap:20px;padding:13px 2px 0;fo
   .map-zoom-controls{top:10px;right:10px}
   .executive-map-stage{height:420px}
   .monitoring-chart{min-height:325px;padding-inline:8px}
+  .monitoring-chart-summary{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px;padding:8px 10px}.monitoring-chart-summary.count-3 .monitoring-chart-summary-item:last-child{grid-column:1/-1}
   .monitoring-chart-stage{min-height:255px}
   .monitoring-chart-stage svg{min-height:255px}
-  .monitoring-chart-tooltip{width:138px;padding:8px;font-size:8px}
+  .monitoring-chart-tooltip{width:170px;padding:10px 11px}
   .map-region-search{margin-inline:10px;max-width:none}
+}
+@container (max-width:600px){
+  .chart-axis-row text,.chart-x-label,.chart-cutoff text{font-size:24px!important}
 }
 @media(max-width:430px){
   .monitoring-chart-legend{gap:8px 12px}.monitoring-chart-legend em{width:100%;margin:0}

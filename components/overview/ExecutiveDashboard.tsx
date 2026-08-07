@@ -119,7 +119,7 @@ export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: 
 
         <article className="card executive-chart">
           <ExecutiveTitle title={`TARGET VS REALISASI PRODUKSI GKG — ${currentSeason?.name ?? ""}`} action={() => setProductionDetailOpen(true)}/>
-          <MonitoringLineChart data={chartData} unit="ton" selectedId={filters.snapshotId ?? undefined} ariaLabel="Grafik target dan realisasi produksi GKG" showPersistentValueLabels={false} />
+          <MonitoringLineChart data={chartData} unit="ton" selectedId={filters.snapshotId ?? undefined} ariaLabel="Grafik target dan realisasi produksi GKG" showSummaryStrip summaryStatus={currentSeason?.status} showPersistentValueLabels={false} />
         </article>
       </section>
 

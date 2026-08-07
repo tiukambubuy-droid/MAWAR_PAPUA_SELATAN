@@ -125,13 +125,15 @@ test("executive map canvas and Lucide hint icon use separate sizing contracts", 
   assert.match(css, /\.map-selection\{[^}]*position:static/s);
 });
 
-test("executive chart opts out of persistent labels while shared default and accessible summary remain", async () => {
+test("executive chart uses the shared summary strip without persistent labels", async () => {
   const executive = await readFile("components/overview/ExecutiveDashboard.tsx", "utf8");
   const chart = await readFile("components/ui/MonitoringLineChart.tsx", "utf8");
   assert.match(executive, /showPersistentValueLabels=\{false\}/);
+  assert.match(executive, /showSummaryStrip/);
   assert.match(chart, /showPersistentValueLabels = true/);
-  assert.match(chart, /showPersistentValueLabels \? positionChartValueLabels/);
-  assert.match(chart, /importantValues\.map\(label => `\$\{label\.field/);
+  assert.match(chart, /showPersistentValueLabels && !showSummaryStrip/);
+  assert.match(chart, /renderPersistentValueLabels \? positionChartValueLabels/);
+  assert.match(chart, /monitoring-chart-summary/);
   assert.match(chart, /event\.key === "Escape"/);
 });
 
