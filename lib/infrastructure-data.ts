@@ -9,6 +9,9 @@ export const productionInputMetadata = inputsJson.metadata;
 export const irrigationRecords = irrigationJson.records as IrrigationRecord[];
 export const productionInputRecords = inputsJson.records as ProductionInputRecord[];
 export const equipmentCategories = new Set(["Traktor", "Combine Harvester", "Pompa Air"]);
+export type ValidationStatusFilter = "all" | "approved" | "pending" | "rejected";
+export type IrrigationCondition = "good" | "light_damage" | "heavy_damage";
+export type SortDirection = "asc" | "desc";
 
 const scopeIds = (regionId: string) => regionId === "93.01"
   ? new Set(regions.filter(region => region.parent_id === "93.01" && region.administrative_type === "district").map(region => region.id))
@@ -18,6 +21,47 @@ const valid = (value: number) => Number.isFinite(value) && value >= 0;
 export function irrigationConditionValid(record: IrrigationRecord, tolerance = irrigationMetadata.rounding_tolerance_km) {
   return [record.network_length_km, record.good_condition_km, record.light_damage_km, record.heavy_damage_km].every(valid) &&
     Math.abs(record.good_condition_km + record.light_damage_km + record.heavy_damage_km - record.network_length_km) <= tolerance;
+}
+
+export function dominantIrrigationCondition(record: IrrigationRecord): IrrigationCondition {
+  const conditions = [
+    { value: record.good_condition_km, condition: "good" as const },
+    { value: record.light_damage_km, condition: "light_damage" as const },
+    { value: record.heavy_damage_km, condition: "heavy_damage" as const },
+  ];
+  return conditions.reduce((largest, candidate) => candidate.value > largest.value ? candidate : largest).condition;
+}
+
+export function compareInfrastructureValues(left: string | number | null, right: string | number | null, direction: SortDirection) {
+  const leftMissing = left === null || (typeof left === "number" && !Number.isFinite(left));
+  const rightMissing = right === null || (typeof right === "number" && !Number.isFinite(right));
+  if (leftMissing || rightMissing) return leftMissing === rightMissing ? 0 : leftMissing ? 1 : -1;
+  const result = typeof left === "number" && typeof right === "number"
+    ? left - right
+    : String(left).localeCompare(String(right), "id-ID", { numeric: true, sensitivity: "base" });
+  return direction === "asc" ? result : -result;
+}
+
+export function paginateRows<T>(rows: readonly T[], page: number, pageSize = 10) {
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const currentPage = Math.min(Math.max(1, page), totalPages);
+  const start = (currentPage - 1) * pageSize;
+  return { rows: rows.slice(start, start + pageSize), currentPage, totalPages, start: rows.length ? start + 1 : 0, end: Math.min(start + pageSize, rows.length), total: rows.length };
+}
+
+export function filterIrrigationRows(records: readonly IrrigationRecord[], query: string, condition: "all" | IrrigationCondition, validation: ValidationStatusFilter) {
+  const needle = query.toLocaleLowerCase("id-ID").trim();
+  return records.filter(record =>
+    (!needle || `${record.network_name} ${regions.find(region => region.id === record.region_id)?.name ?? ""}`.toLocaleLowerCase("id-ID").includes(needle)) &&
+    (condition === "all" || dominantIrrigationCondition(record) === condition) &&
+    (validation === "all" || record.validation_status === validation));
+}
+
+export function filterProductionInputRows(records: readonly ProductionInputRecord[], query: string, validation: ValidationStatusFilter) {
+  const needle = query.toLocaleLowerCase("id-ID").trim();
+  return records.filter(record =>
+    (!needle || `${record.item_name} ${record.category} ${regions.find(region => region.id === record.region_id)?.name ?? ""}`.toLocaleLowerCase("id-ID").includes(needle)) &&
+    (validation === "all" || record.validation_status === validation));
 }
 
 export function selectIrrigation(seasonId: string, regionId = "93.01") {

@@ -122,21 +122,61 @@ try {
     await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Ketahanan Pangan\"]')?.click()"); await waitFor(".food-security-page");
     const foodPage = await evaluate(`(()=>{const q=s=>document.querySelector(s),body=q('.food-security-page'),meta=q('.monitoring-heading span'),card=q('.monitoring-kpis article'),disclaimer=q('.simulation-disclaimer');return{title:q('.monitoring-heading h1')?.innerText,kpis:body.querySelectorAll('.monitoring-kpis article').length,meta:parseFloat(getComputedStyle(meta).fontSize),card:parseFloat(getComputedStyle(card).fontSize),disclaimer:disclaimer?.innerText,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+1,bad:/undefined|NaN/.test(body.innerText)}})()`);
     assert.equal(foodPage.title, "KETAHANAN PANGAN"); assert.equal(foodPage.kpis, 6); assert.ok(foodPage.meta >= 12 && !foodPage.overflow && !foodPage.bad); assert.match(foodPage.disclaimer, /bukan IKP resmi/);
+    assert.equal(await evaluate("document.querySelectorAll('.food-balance-chart .monitoring-chart').length"), 1);
+    assert.equal(await evaluate("document.querySelectorAll('.food-balance-chart .chart-value-label').length"), 0);
+    assert.equal(await evaluate("document.querySelectorAll('.food-balance-chart .monitoring-chart-summary-item').length"), 3);
     await evaluate(`(()=>{const select=[...document.querySelectorAll('.food-security-page select')].find(node=>node.closest('label')?.innerText.startsWith('Musim'));select.value='MT1-2026';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(30);
     assert.ok(await evaluate("document.querySelectorAll('.food-security-page .monitoring-table tbody tr').length > 0"));
     await evaluate(`(()=>{const select=[...document.querySelectorAll('.food-security-page select')].find(node=>node.closest('label')?.innerText.startsWith('Distrik'));select.value='93.01.02';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(30);
     assert.equal(await evaluate("document.querySelector('.food-security-page .monitoring-empty')?.innerText"), "Belum dipantau");
     await evaluate(`(()=>{const select=[...document.querySelectorAll('.food-security-page select')].find(node=>node.closest('label')?.innerText.startsWith('Distrik'));select.value='93.01.05';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await waitFor(".food-security-page .monitoring-table tbody button");
-    await evaluate("document.querySelector('.food-security-page .monitoring-table tbody button').click()"); await waitFor(".monitoring-modal[role=dialog]");
+    await evaluate("(()=>{const button=document.querySelector('.food-security-page .monitoring-table tbody button');button.dataset.qaTrigger='food';button.focus();button.click()})()"); await waitFor(".monitoring-modal[role=dialog]");
+    await sleep(30);
     assert.equal(await evaluate("getComputedStyle(document.body).overflow"), "hidden");
+    assert.equal(await evaluate("document.activeElement===document.querySelector('.monitoring-modal')"), true);
     await evaluate("document.querySelector('.monitoring-modal').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))"); await sleep(30);
+    assert.equal(await evaluate("document.activeElement?.dataset.qaTrigger"), "food");
+    assert.notEqual(await evaluate("getComputedStyle(document.body).overflow"), "hidden");
+    if (width === 1440) {
+      const foodUrl = await evaluate("location.href");
+      const foodKpi = await evaluate("document.querySelector('.food-security-page .monitoring-kpis strong')?.innerText");
+      await send("Page.reload"); await waitFor(".food-security-page"); await sleep(350);
+      assert.equal(await evaluate("location.href"), foodUrl);
+      assert.equal(await evaluate("document.querySelector('.food-security-page .monitoring-kpis strong')?.innerText"), foodKpi);
+      await evaluate(`(()=>{const select=[...document.querySelectorAll('.food-security-page select')].find(node=>node.closest('label')?.innerText.startsWith('Musim'));select.value='MT2-2026';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(40);
+      assert.match(await evaluate("location.href"), /season=MT2-2026/);
+      await evaluate("history.back()"); await sleep(80); assert.match(await evaluate("location.href"), /season=MT1-2026/);
+      await evaluate("history.forward()"); await sleep(80); assert.match(await evaluate("location.href"), /season=MT2-2026/);
+    }
     await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Infrastruktur dan Sarana\"]')?.click()"); await waitFor(".infrastructure-page");
     assert.equal(await evaluate("document.querySelectorAll('.infrastructure-page [role=tab]').length"), 2);
     assert.equal(await evaluate("document.querySelectorAll('.infrastructure-page .monitoring-kpis article').length"), 7);
-    await evaluate("document.querySelectorAll('.infrastructure-page [role=tab]')[1].click()"); await waitFor(".infrastructure-page .local-filter");
+    await evaluate("(()=>{const button=document.querySelector('.infrastructure-page .monitoring-table tbody button');button.dataset.qaTrigger='irrigation';button.focus();button.click()})()"); await waitFor(".monitoring-modal[role=dialog]");
+    await sleep(30);
+    assert.equal(await evaluate("document.activeElement===document.querySelector('.monitoring-modal')"), true);
+    assert.ok(await evaluate("document.querySelector('.monitoring-modal-body').innerText.includes('Toleransi rekonsiliasi')"));
+    await evaluate("document.querySelector('.monitoring-modal header button').click()"); await sleep(30);
+    assert.equal(await evaluate("document.activeElement?.dataset.qaTrigger"), "irrigation");
+    assert.notEqual(await evaluate("getComputedStyle(document.body).overflow"), "hidden");
+    await evaluate("document.querySelectorAll('.infrastructure-page [role=tab]')[1].click()"); await waitFor(".infrastructure-page .local-filters");
     assert.equal(await evaluate("document.querySelectorAll('.infrastructure-page .monitoring-kpis article').length"), 7);
-    await evaluate(`(()=>{const select=document.querySelector('.infrastructure-page .local-filter select');select.value='Pupuk';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(30);
+    await evaluate(`(()=>{const select=[...document.querySelectorAll('.infrastructure-page .local-filters select')].find(node=>node.closest('label')?.innerText.startsWith('Kategori'));select.value='Pupuk';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(30);
     assert.equal(await evaluate("document.querySelectorAll('.infrastructure-page .monitoring-table tbody tr').length"), 1);
+    await evaluate("(()=>{const button=document.querySelector('.infrastructure-page .monitoring-table tbody button');button.dataset.qaTrigger='input';button.focus();button.click()})()"); await waitFor(".monitoring-modal[role=dialog]");
+    assert.ok(await evaluate("document.querySelector('.monitoring-modal-body').innerText.includes('Pemenuhan = tersedia')"));
+    await evaluate("document.querySelector('.monitoring-modal footer button').click()"); await sleep(30);
+    assert.equal(await evaluate("document.activeElement?.dataset.qaTrigger"), "input");
+    assert.notEqual(await evaluate("getComputedStyle(document.body).overflow"), "hidden");
+    if (width === 1440) {
+      const infrastructureUrl = await evaluate("location.href");
+      await send("Page.reload"); await waitFor(".infrastructure-page"); await sleep(350);
+      assert.equal(await evaluate("location.href"), infrastructureUrl);
+      assert.equal(await evaluate("document.querySelector('[role=tab][aria-selected=true]')?.innerText.trim()"), "Irigasi");
+      await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Ketahanan Pangan\"]')?.click()"); await waitFor(".food-security-page");
+      await evaluate("history.back()"); await sleep(80); assert.ok(await evaluate("Boolean(document.querySelector('.infrastructure-page'))"));
+      await evaluate("history.forward()"); await sleep(80); assert.ok(await evaluate("Boolean(document.querySelector('.food-security-page'))"));
+      await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Infrastruktur dan Sarana\"]')?.click()"); await waitFor(".infrastructure-page");
+    }
     assert.equal(await evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth + 1"), false);
   }
 

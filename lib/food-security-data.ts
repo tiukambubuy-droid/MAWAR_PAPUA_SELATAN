@@ -1,5 +1,6 @@
 import foodSecurityJson from "@/data/monitoring/food-security-monitoring.json";
 import { aggregateRegion, getSeasonById, millingYield, regions } from "@/lib/data-foundation";
+import type { ChartDataPoint } from "@/lib/chart-data";
 
 export type FoodSecurityRecord = (typeof foodSecurityJson.records)[number];
 export type FoodSecurityMetrics = {
@@ -78,6 +79,24 @@ export function selectFoodSecurity(seasonId: string, regionId = "93.01", validat
 export function foodAvailabilityScore(metrics: ReturnType<typeof selectFoodSecurity>["aggregate"]) {
   if (!metrics || metrics.seasonNeedTon <= 0) return null;
   return Math.max(0, Math.min(100, metrics.balanceAvailabilityTon / metrics.seasonNeedTon * 100));
+}
+
+export function getFoodSecurityChartData(regionId = "93.01", validation = "all"): ChartDataPoint[] {
+  return ["MT1-2026", "MT2-2026"].flatMap((seasonId, index) => {
+    const aggregate = selectFoodSecurity(seasonId, regionId, validation).aggregate;
+    if (!aggregate) return [];
+    return [{
+      id: seasonId,
+      period: seasonId,
+      label: seasonId === "MT1-2026" ? "MT I 2026" : "MT II 2026",
+      stageIndex: index + 1,
+      target: aggregate.seasonNeedTon,
+      actual: aggregate.balanceAvailabilityTon,
+      projection: null,
+      status: "actual" as const,
+      isCutoff: false,
+    }];
+  });
 }
 
 export function formatFoodValue(value: number | null, unit: "ton" | "hari" | "%" = "ton") {

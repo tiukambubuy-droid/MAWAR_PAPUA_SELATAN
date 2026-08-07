@@ -74,7 +74,7 @@ test("metadata icon memakai turunan lokal berukuran tepat dan tidak memakai logo
 
 test("identitas MAWAR adalah tombol beranda native tanpa mereset filter", () => {
   assert.match(shell, /<button type="button" className="brand-mark" aria-label="Buka beranda MAWAR Papua Selatan"/);
-  assert.match(shell, /onClick=\{\(\) => setActiveNav\("Ringkasan"\)\}/);
+  assert.match(shell, /onClick=\{\(\) => navigate\("Ringkasan"\)\}/);
   assert.doesNotMatch(shell.match(/<button type="button" className="brand-mark"[\s\S]*?<\/button>/)?.[0] ?? "", /setSeason|setDistrict|setVillage|sessionStorage|history\./);
 });
 

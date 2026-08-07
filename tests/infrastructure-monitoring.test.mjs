@@ -62,3 +62,36 @@ test("infrastructure page exposes keyboard tabs, global filters, modal, and navi
   assert.ok(shell.indexOf('label: "Ketahanan Pangan"') < shell.indexOf('label: "Infrastruktur & Sarana"'));
   assert.ok(shell.indexOf('label: "Infrastruktur & Sarana"') < shell.indexOf('label: "Risiko & Iklim"'));
 });
+
+test("production helpers filter dominant condition and validation together", () => {
+  const rows = infra.selectIrrigation("MT2-2026").items;
+  assert.equal(infra.dominantIrrigationCondition(rows[0]), "good");
+  assert.equal(infra.filterIrrigationRows(rows, "semangga", "good", "approved").length, 1);
+  assert.equal(infra.filterIrrigationRows(rows, "", "heavy_damage", "all").length, 0);
+  const inputRows = infra.selectProductionInputs("MT2-2026").items;
+  assert.equal(infra.filterProductionInputRows(inputRows, "pompa", "pending").length, 1);
+  assert.equal(infra.filterProductionInputRows(inputRows, "pompa", "approved").length, 0);
+});
+
+test("sorting is numeric/string/date aware, reversible, and null-last", () => {
+  assert.ok(infra.compareInfrastructureValues(2, 10, "asc") < 0);
+  assert.ok(infra.compareInfrastructureValues(2, 10, "desc") > 0);
+  assert.ok(infra.compareInfrastructureValues("Semangga", "Tanah Miring", "asc") < 0);
+  assert.ok(infra.compareInfrastructureValues(Date.parse("2026-01-01"), Date.parse("2026-07-01"), "asc") < 0);
+  assert.ok(infra.compareInfrastructureValues(null, 0, "asc") > 0);
+  assert.ok(infra.compareInfrastructureValues(null, 0, "desc") > 0);
+});
+
+test("pagination reports boundaries and clamps invalid pages", () => {
+  const records = Array.from({ length: 23 }, (_, index) => index + 1);
+  assert.deepEqual(infra.paginateRows(records, 1, 10), { rows:[1,2,3,4,5,6,7,8,9,10], currentPage:1, totalPages:3, start:1, end:10, total:23 });
+  assert.deepEqual(infra.paginateRows(records, 3, 10).rows, [21,22,23]);
+  assert.equal(infra.paginateRows(records, 99, 10).currentPage, 3);
+  assert.equal(infra.paginateRows([], 1, 10).start, 0);
+});
+
+test("infrastructure UI includes complete filters, sortable semantics, pagination, and modal metadata", async () => {
+  const page = await readFile("components/infrastructure/InfrastructurePage.tsx", "utf8");
+  for (const text of ["Semua Kondisi","Rusak Ringan","Rusak Berat","Semua Validasi","aria-sort","Halaman sebelumnya","Pemeriksaan terakhir","Toleransi rekonsiliasi","Persentase pemenuhan","Verifikasi terakhir"]) assert.match(page, new RegExp(text));
+  assert.doesNotMatch(page, /\.local-filter\b/);
+});

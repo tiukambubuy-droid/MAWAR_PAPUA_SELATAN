@@ -73,3 +73,15 @@ test("food security page keeps global filters and accessible modal contract", as
   assert.match(shell, /Buka halaman \$\{label\}/);
   assert.match(shell, /Ketahanan Pangan/);
 });
+
+test("food availability chart uses seasonal selector results without invented projection", async () => {
+  const points = selector.getFoodSecurityChartData("93.01");
+  assert.deepEqual(points.map(point => point.label), ["MT I 2026", "MT II 2026"]);
+  assert.ok(points.every(point => point.actual > 0 && point.target > 0 && point.projection === null));
+  assert.equal(points[0].actual, selector.selectFoodSecurity("MT1-2026").aggregate.balanceAvailabilityTon);
+  assert.equal(points[1].target, selector.selectFoodSecurity("MT2-2026").aggregate.seasonNeedTon);
+  const page = await readFile("components/food-security/FoodSecurityPage.tsx", "utf8");
+  assert.match(page, /MonitoringLineChart/);
+  assert.match(page, /showSummaryStrip/);
+  assert.doesNotMatch(page, /balance-bars/);
+});

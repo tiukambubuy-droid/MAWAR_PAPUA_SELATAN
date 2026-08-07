@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
@@ -32,6 +32,7 @@ const canonicalDistrictNames = regions
   .map(region => region.name)
   .sort((a, b) => a.localeCompare(b, "id"));
 const mapRegionOptions = createMapRegionOptions(regions);
+const viewSlugs: Record<string,string> = { "Ringkasan":"ringkasan", "Peta Lahan":"peta-lahan", "Musim Tanam":"musim-tanam", "Produksi":"produksi", "Ketahanan Pangan":"ketahanan-pangan", "Infrastruktur & Sarana":"infrastruktur-sarana" };
 
 const nav = [
   { Icon: LayoutDashboard, label: "Ringkasan", enabled: true },
@@ -937,6 +938,26 @@ function ProductionPage() {
 
 function HomeContent() {
   const [activeNav, setActiveNav] = useState("Ringkasan");
+  const viewFromLocation = useCallback(() => {
+    const slug = window.location.hash.startsWith("#view=") ? window.location.hash.slice(6) : "";
+    const fromUrl = Object.entries(viewSlugs).find(([,value]) => value === slug)?.[0];
+    if (fromUrl) return fromUrl;
+    const stored = sessionStorage.getItem("mawar-active-view-v1");
+    return stored && viewSlugs[stored] ? stored : "Ringkasan";
+  }, []);
+  const navigate = useCallback((label:string) => {
+    setActiveNav(label);
+    sessionStorage.setItem("mawar-active-view-v1",label);
+    const hash = `#view=${viewSlugs[label] ?? viewSlugs.Ringkasan}`;
+    if (window.location.hash !== hash) window.history.pushState(null,"",`${window.location.pathname}${window.location.search}${hash}`);
+  }, []);
+  useEffect(() => {
+    queueMicrotask(() => setActiveNav(viewFromLocation()));
+    const onPopState=()=>setActiveNav(viewFromLocation());
+    window.addEventListener("popstate",onPopState);
+    return()=>window.removeEventListener("popstate",onPopState);
+  },[viewFromLocation]);
+  useEffect(()=>{sessionStorage.setItem("mawar-active-view-v1",activeNav);},[activeNav]);
   const { filters } = useDashboardFilters();
   const printDistrict = filters.districtId ? getRegionById(filters.districtId) : null;
   const printVillage = filters.villageId ? getRegionById(filters.villageId) : null;
@@ -963,7 +984,7 @@ function HomeContent() {
       </header>
       <main className="app-shell">
       <aside className="sidebar">
-        <button type="button" className="brand-mark" aria-label="Buka beranda MAWAR Papua Selatan" onClick={() => setActiveNav("Ringkasan")}>
+        <button type="button" className="brand-mark" aria-label="Buka beranda MAWAR Papua Selatan" onClick={() => navigate("Ringkasan")}>
           <Image className="brand-logo" src="/branding/logo-papua-selatan.png" alt="" width={48} height={60} priority />
           <span className="brand-copy"><strong>MAWAR</strong><small>Papua Selatan</small></span>
         </button>
@@ -972,7 +993,7 @@ function HomeContent() {
             <button
               key={label}
               className={activeNav === label ? "nav-item active" : "nav-item"}
-              onClick={() => enabled && setActiveNav(label)}
+              onClick={() => enabled && navigate(label)}
               aria-label={label === "Infrastruktur & Sarana" ? "Buka halaman Infrastruktur dan Sarana" : `Buka halaman ${label}`}
               aria-current={activeNav === label ? "page" : undefined}
               aria-disabled={!enabled}
@@ -1008,7 +1029,7 @@ function HomeContent() {
         </header>
 
         <div className="content">
-          {activeNav === "Ringkasan" && <ExecutiveDashboard onNavigate={setActiveNav} />}
+          {activeNav === "Ringkasan" && <ExecutiveDashboard onNavigate={navigate} />}
           {activeNav === "Peta Lahan" && <LandPage />}
           {activeNav === "Musim Tanam" && <SeasonPage />}
           {activeNav === "Produksi" && <ProductionPage />}

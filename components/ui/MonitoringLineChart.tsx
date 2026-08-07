@@ -6,7 +6,7 @@ import { chartDomain, chartSeries, chartSummaryItems, chartValueLabels, formatCo
 
 type Series = "target" | "actual" | "projection";
 
-export function MonitoringLineChart({ data, unit, ariaLabel, selectedId, showSummaryStrip = false, summaryStatus, showPersistentValueLabels = true, presentation = "default" }: {
+export function MonitoringLineChart({ data, unit, ariaLabel, selectedId, showSummaryStrip = false, summaryStatus, showPersistentValueLabels = true, presentation = "default", seriesLabels, summaryItemsOverride }: {
   data: ChartDataPoint[];
   unit: "ha" | "ton";
   ariaLabel: string;
@@ -15,8 +15,11 @@ export function MonitoringLineChart({ data, unit, ariaLabel, selectedId, showSum
   summaryStatus?: "completed" | "in_progress";
   showPersistentValueLabels?: boolean;
   presentation?: "default" | "production";
+  seriesLabels?: Partial<Record<Series, string>>;
+  summaryItemsOverride?: Array<{ field: Series | "balance"; label: string; value: number | null }>;
 }) {
   const renderPersistentValueLabels = showPersistentValueLabels && !showSummaryStrip;
+  const labelFor = (field: Series) => seriesLabels?.[field] ?? (field === "target" ? "Target" : field === "actual" ? "Realisasi" : "Proyeksi");
   const [activeId, setActiveId] = useState<string | null>(renderPersistentValueLabels ? selectedId ?? data.find(point => point.isCutoff)?.id ?? null : null);
   const [tooltipExclusion, setTooltipExclusion] = useState<ChartCollisionRect | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -32,7 +35,7 @@ export function MonitoringLineChart({ data, unit, ariaLabel, selectedId, showSum
   const cutoff = data.find(point => point.isCutoff);
   const ticks = Array.from({ length: 5 }, (_, index) => domain.max * index / 4);
   const importantValues = chartValueLabels(data);
-  const summaryItems = useMemo(() => chartSummaryItems(data, summaryStatus), [data, summaryStatus]);
+  const summaryItems = useMemo(() => summaryItemsOverride ?? chartSummaryItems(data, summaryStatus), [data, summaryItemsOverride, summaryStatus]);
   const valueLabels = renderPersistentValueLabels ? positionChartValueLabels(importantValues.map(label => ({
     ...label,
     text: `${label.field === "actual" ? "Realisasi" : label.field === "target" ? "Target" : "Proyeksi"} ${formatCompactId(label.value)} ${unit}`,
@@ -83,7 +86,7 @@ export function MonitoringLineChart({ data, unit, ariaLabel, selectedId, showSum
   return <div className={`monitoring-chart ${presentation === "production" ? "monitoring-chart-production" : ""}`} data-reduced-motion="supported" data-presentation={presentation}>
     {summaryStrip}
     <div className="monitoring-chart-legend" aria-label="Legenda grafik">
-      {availableSeries.map(field => <span key={field} className={field}><i />{field === "target" ? "Target" : field === "actual" ? "Realisasi" : "Proyeksi"}</span>)}
+      {availableSeries.map(field => <span key={field} className={field}><i />{labelFor(field)}</span>)}
       <em>Satuan: {unit}</em>
     </div>
     <div className="monitoring-chart-stage" ref={stageRef} onMouseLeave={closeTooltip} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget)) closeTooltip(); }} onKeyDown={event => { if (event.key === "Escape") closeTooltip(); }}>
@@ -107,16 +110,16 @@ export function MonitoringLineChart({ data, unit, ariaLabel, selectedId, showSum
             className={`chart-point ${field}`}
             cx={x(index)} cy={y(point[field]!)} r={active?.id === point.id ? 6 : 4}
             tabIndex={0}
-            aria-label={`${point.label}, ${field === "actual" ? "realisasi" : "proyeksi"} ${point[field]!.toLocaleString("id-ID")} ${unit}`}
+            aria-label={`${point.label}, ${labelFor(field)} ${point[field]!.toLocaleString("id-ID")} ${unit}`}
             onFocus={() => openTooltip(point.id)} onMouseEnter={() => openTooltip(point.id)} onClick={() => activeId === point.id ? closeTooltip() : openTooltip(point.id)}
           />)}
         </g>)}
       </svg>
       {active && <div ref={tooltipRef} className={`monitoring-chart-tooltip ${active.stageIndex > data.length / 2 ? "tooltip-corner-left" : "tooltip-corner-right"}`}>
         <strong>{active.label}</strong>
-        {active.target !== null && <span>Target <b>{active.target.toLocaleString("id-ID")} {unit}</b></span>}
-        {active.actual !== null && <span>Realisasi <b>{active.actual.toLocaleString("id-ID")} {unit}</b></span>}
-        {active.projection !== null && <span>Proyeksi <b>{active.projection.toLocaleString("id-ID")} {unit}</b></span>}
+        {active.target !== null && <span>{labelFor("target")} <b>{active.target.toLocaleString("id-ID")} {unit}</b></span>}
+        {active.actual !== null && <span>{labelFor("actual")} <b>{active.actual.toLocaleString("id-ID")} {unit}</b></span>}
+        {active.projection !== null && <span>{labelFor("projection")} <b>{active.projection.toLocaleString("id-ID")} {unit}</b></span>}
         {active.isCutoff && <em>Cut-off data</em>}
       </div>}
     </div>
