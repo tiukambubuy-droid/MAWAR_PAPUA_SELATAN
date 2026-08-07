@@ -4,10 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
-import { ChevronDown, Search, X } from "lucide-react";
+import { BarChart3, ChevronDown, CloudSun, FileText, LayoutDashboard, Map, Search, ShieldCheck, Sprout, X } from "lucide-react";
 import SeasonCommandCenter from "@/components/season/SeasonPage";
 import ProductionCommandCenter from "@/components/production/ProductionPage";
 import ExecutiveDashboard from "@/components/overview/ExecutiveDashboard";
+import FoodSecurityPage from "@/components/food-security/FoodSecurityPage";
 import { DashboardFilterProvider, useDashboardFilters } from "@/components/DashboardFilterProvider";
 import {
   aggregateRegion,
@@ -32,13 +33,13 @@ const canonicalDistrictNames = regions
 const mapRegionOptions = createMapRegionOptions(regions);
 
 const nav = [
-  ["▦", "Ringkasan"],
-  ["◇", "Peta Lahan"],
-  ["♧", "Musim Tanam"],
-  ["▥", "Produksi"],
-  ["▣", "Stok Beras"],
-  ["△", "Risiko & Iklim"],
-  ["▤", "Laporan"],
+  { Icon: LayoutDashboard, label: "Ringkasan", enabled: true },
+  { Icon: Map, label: "Peta Lahan", enabled: true },
+  { Icon: Sprout, label: "Musim Tanam", enabled: true },
+  { Icon: BarChart3, label: "Produksi", enabled: true },
+  { Icon: ShieldCheck, label: "Ketahanan Pangan", enabled: true },
+  { Icon: CloudSun, label: "Risiko & Iklim", enabled: false },
+  { Icon: FileText, label: "Laporan", enabled: false },
 ];
 
 type MapLevel = "province" | "district";
@@ -965,16 +966,16 @@ function HomeContent() {
           <span className="brand-copy"><strong>MAWAR</strong><small>Papua Selatan</small></span>
         </button>
         <nav aria-label="Navigasi utama">
-          {nav.map(([icon, label]) => (
+          {nav.map(({ Icon, label, enabled }) => (
             <button
               key={label}
               className={activeNav === label ? "nav-item active" : "nav-item"}
-              onClick={() => ["Ringkasan","Peta Lahan","Musim Tanam","Produksi"].includes(label) && setActiveNav(label)}
+              onClick={() => enabled && setActiveNav(label)}
               aria-label={`Buka halaman ${label}`}
               aria-current={activeNav === label ? "page" : undefined}
-              aria-disabled={!["Ringkasan","Peta Lahan","Musim Tanam","Produksi"].includes(label)}
+              aria-disabled={!enabled}
             >
-              <span aria-hidden="true">{icon}</span>
+              <span aria-hidden="true"><Icon size={21} /></span>
               <span>{label}</span>
             </button>
           ))}
@@ -1009,6 +1010,7 @@ function HomeContent() {
           {activeNav === "Peta Lahan" && <LandPage />}
           {activeNav === "Musim Tanam" && <SeasonPage />}
           {activeNav === "Produksi" && <ProductionPage />}
+          {activeNav === "Ketahanan Pangan" && <FoodSecurityPage />}
 
           <footer><span>Data pada prototipe bersifat simulasi dan perlu divalidasi sebelum digunakan sebagai dasar kebijakan.</span><strong>© 2026 Pemerintah Provinsi Papua Selatan</strong></footer>
         </div>

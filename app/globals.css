@@ -3,6 +3,7 @@
 @import "./production.css";
 @import "./production-modal.css";
 @import "./executive-dashboard.css";
+@import "./monitoring-pages.css";
 
 :root {
   --forest: #083f32;
