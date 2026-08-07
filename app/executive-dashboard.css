@@ -67,6 +67,11 @@
 .executive-dashboard .executive-map-error strong{color:#315c4c;font-size:11px}
 .executive-dashboard .executive-map-canvas>svg{position:static;display:block;width:100%;height:100%;inset:auto;padding:0;overflow:visible;filter:drop-shadow(0 8px 9px #164c3628)}
 .executive-dashboard .executive-map-canvas>svg text{font-size:12px}
+.executive-dashboard .executive-map-region-tooltip{position:absolute;z-index:3;top:52px;left:18px;max-width:calc(100% - 36px);padding:8px 11px;border:1px solid #b8d4c8;border-radius:8px;background:#fffffff5;color:#123e31;font-size:12px;line-height:1.4;font-weight:800;box-shadow:0 7px 18px #123f3124;pointer-events:none}
+.executive-dashboard .executive-map-region-tooltip span{color:#547168;font-weight:650}
+.executive-dashboard .executive-big-layer g.selected path{fill:#147c57;stroke:#053f2f;stroke-width:3;filter:brightness(.94);animation:executiveDistrictSelected .28s ease-out}
+.executive-dashboard .executive-big-layer path{transition:fill .2s ease,filter .2s ease,stroke-width .2s ease}
+@keyframes executiveDistrictSelected{from{filter:brightness(1.08)}to{filter:brightness(.94)}}
 .executive-dashboard .executive-map-footer{position:relative;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 12px;border-top:1px solid #dce7e1;background:#f8fbf9}
 .executive-dashboard .executive-map-source{position:static;max-width:none;padding:7px 9px;box-shadow:none;flex:0 1 auto}
 .executive-dashboard .map-selection{position:static;display:flex;align-items:center;gap:8px;max-width:min(260px,50%);padding:7px 10px;background:#e8f4ed;color:#174c3b;box-shadow:none}
@@ -90,6 +95,7 @@
   .executive-dashboard .executive-map-source,.executive-dashboard .map-selection{width:100%;max-width:none;box-sizing:border-box}
   .executive-dashboard .executive-secondary{grid-template-columns:1fr}
   .executive-dashboard .executive-secondary-left{grid-row:auto}
+  .executive-dashboard .executive-map-region-tooltip{top:44px;left:10px;max-width:calc(100% - 20px)}
 }
 
 /* Penyempurnaan Ringkasan: peta penuh, grafik rapi, dan keterbacaan pimpinan. */

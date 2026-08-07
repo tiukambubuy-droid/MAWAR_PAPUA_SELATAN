@@ -10,6 +10,7 @@
   "build": "next build",
   "start": "next start",
   "test": "next build && node --test tests/*.test.mjs",
+  "test:browser": "node tests/browser/map-production-presentation.browser.mjs",
   "lint": "eslint ."
   },
   "dependencies": {

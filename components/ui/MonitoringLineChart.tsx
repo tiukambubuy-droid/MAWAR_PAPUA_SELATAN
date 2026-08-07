@@ -6,12 +6,13 @@ import { chartDomain, chartSeries, chartValueLabels, formatCompactId, positionCh
 
 type Series = "target" | "actual" | "projection";
 
-export function MonitoringLineChart({ data, unit, ariaLabel, selectedId, showPersistentValueLabels = true }: {
+export function MonitoringLineChart({ data, unit, ariaLabel, selectedId, showPersistentValueLabels = true, presentation = "default" }: {
   data: ChartDataPoint[];
   unit: "ha" | "ton";
   ariaLabel: string;
   selectedId?: string;
   showPersistentValueLabels?: boolean;
+  presentation?: "default" | "production";
 }) {
   const [activeId, setActiveId] = useState<string | null>(showPersistentValueLabels ? selectedId ?? data.find(point => point.isCutoff)?.id ?? null : null);
   const [tooltipExclusion, setTooltipExclusion] = useState<ChartCollisionRect | null>(null);
@@ -67,7 +68,7 @@ export function MonitoringLineChart({ data, unit, ariaLabel, selectedId, showPer
 
   if (!data.length) return <div className="monitoring-chart-empty" role="status">Tidak ada data sesuai filter.</div>;
 
-  return <div className="monitoring-chart" data-reduced-motion="supported">
+  return <div className={`monitoring-chart ${presentation === "production" ? "monitoring-chart-production" : ""}`} data-reduced-motion="supported" data-presentation={presentation}>
     <div className="monitoring-chart-legend" aria-label="Legenda grafik">
       {availableSeries.map(field => <span key={field} className={field}><i />{field === "target" ? "Target" : field === "actual" ? "Realisasi" : "Proyeksi"}</span>)}
       <em>Satuan: {unit}</em>

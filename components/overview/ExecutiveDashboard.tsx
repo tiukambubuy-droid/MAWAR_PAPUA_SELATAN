@@ -12,6 +12,7 @@ import { aggregateProduction, recordsForScope } from "@/lib/production-data";
 import {
   aggregateRegion,
   compactYieldNote,
+  getRegionById,
   getRegionByName,
   getSeasonById,
   millingYield,
@@ -22,8 +23,9 @@ import { useDashboardFilters } from "@/components/DashboardFilterProvider";
 import { compareActualAtEquivalentStage, compareProjectedFinalToCompletedSeason, getChartDataPoints } from "@/lib/chart-data";
 import { useAccessibleModal } from "@/components/ui/useAccessibleModal";
 import { MonitoringLineChart } from "@/components/ui/MonitoringLineChart";
-import { fitToBounds, prioritizedMapLabels } from "@/lib/visualization";
+import { fitToBounds } from "@/lib/visualization";
 import { createBigMapRequestController, createBigMapViewCallbacks, reduceBigMapViewState, type BigMapRequestController, type BigMapViewState } from "@/lib/big-map-request-controller";
+import { displayedExecutiveRegionId } from "@/lib/executive-map-interaction";
 
 type PageName = "Peta Lahan" | "Musim Tanam" | "Produksi";
 
@@ -59,7 +61,6 @@ export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: 
   const productionRows = useMemo(() => recordsForScope("Semua Distrik", "Semua Kampung", seasonId), [seasonId]);
   const regencyProduction = useMemo(() => aggregateProduction(productionRows), [productionRows]);
   const selectedDistrict = districtId ? regions.find(item => item.id === districtId) ?? null : null;
-  const selectedDistrictName = selectedDistrict?.name ?? "";
   const districtOptions = regions.filter(item => item.administrative_type === "district" && item.parent_id === "93.01");
   const scope = aggregateRegion(selectedDistrict?.id ?? "93.01", seasonId);
   const production = selectedDistrict
@@ -112,7 +113,7 @@ export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: 
       <section className="executive-primary">
         <article className="card executive-map">
           <ExecutiveTitle title="PETA SEBARAN LAHAN" action={() => onNavigate("Peta Lahan")}/>
-          <ExecutiveBigMap selected={selectedDistrictName} selectedLabel={selectedDistrict ? `Distrik ${selectedDistrict.name}` : "Kabupaten Merauke"} hint={selectedDistrict?.monitoring_status === "not_monitored" ? "Belum dipantau" : selectedRow ? `${format(selectedRow.gkg)} ton GKG · wilayah terpantau` : "Pilih distrik untuk melihat data"} onSelect={name => setDistrict(getRegionByName(name, "district")?.id ?? null)}/>
+          <ExecutiveBigMap selectedRegionId={selectedDistrict?.id ?? null} selectedLabel={selectedDistrict ? `Distrik ${selectedDistrict.name}` : "Kabupaten Merauke"} hint={selectedDistrict?.monitoring_status === "not_monitored" ? "Belum dipantau" : selectedRow ? `${format(selectedRow.gkg)} ton GKG · wilayah terpantau` : "Pilih distrik untuk melihat data"} onSelect={setDistrict}/>
         </article>
 
         <article className="card executive-chart">
@@ -174,7 +175,7 @@ function AlertItem({ Icon, title, text, warn, blue }: { Icon: typeof Target; tit
   return <article className={warn ? "warn" : blue ? "blue" : ""}><Icon size={25}/><div><strong>{title}</strong><span>{text}</span></div></article>;
 }
 
-function ExecutiveBigMap({ selected, selectedLabel, hint, onSelect }: { selected: string; selectedLabel: string; hint: string; onSelect: (name: string) => void }) {
+function ExecutiveBigMap({ selectedRegionId, selectedLabel, hint, onSelect }: { selectedRegionId: string | null; selectedLabel: string; hint: string; onSelect: (regionId: string) => void }) {
   // Executive preview contract: district click/keyboard selection only. Full zoom,
   // pan, reset and drag interactions remain on the dedicated Peta Lahan page.
   const [mapState, dispatchMapState] = useReducer(
@@ -182,6 +183,8 @@ function ExecutiveBigMap({ selected, selectedLabel, hint, onSelect }: { selected
     { features: [], sourceMode: "big", status: "loading", context: null } satisfies BigMapViewState<GeoFeature>,
   );
   const requestControllerRef = useRef<BigMapRequestController<GeoFeature> | null>(null);
+  const [hoveredRegionId, setHoveredRegionId] = useState<string | null>(null);
+  const [focusedRegionId, setFocusedRegionId] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = createBigMapRequestController<GeoFeature>({
@@ -229,22 +232,27 @@ function ExecutiveBigMap({ selected, selectedLabel, hint, onSelect }: { selected
         outer.reduce((sum, point) => sum + point[0], 0) / outer.length,
         outer.reduce((sum, point) => sum + point[1], 0) / outer.length,
       ] : [0, 0];
-      return { name: districtName(feature), path, center };
-    });
+      const region = getRegionByName(districtName(feature), "district");
+      return region ? { regionId: region.id, name: region.name, path, center } : null;
+    }).filter((item): item is NonNullable<typeof item> => item !== null);
   }, [features]);
 
-  const visibleLabels = useMemo(() => prioritizedMapLabels(model.map(item => ({ ...item, selected: item.name === selected, active: true })), 52, 12), [model, selected]);
+  const displayedRegionId = displayedExecutiveRegionId({ hoveredRegionId, focusedRegionId, selectedRegionId });
+  const visibleName = displayedRegionId ? getRegionById(displayedRegionId)?.name ?? null : null;
 
   return <div className="executive-map-stage">
     <div className="executive-map-canvas">{model.length ? <svg viewBox="0 0 900 480" role="img" aria-label="Peta resmi distrik Kabupaten Merauke dari BIG">
       <g className="executive-big-layer">
-        {model.map((item, index) => <g key={item.name} className={selected === item.name ? "selected" : ""} onClick={() => onSelect(item.name)} role="button" tabIndex={0} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") onSelect(item.name); }}>
+        {model.map((item, index) => <g key={item.regionId} data-region-id={item.regionId} className={selectedRegionId === item.regionId ? "selected" : ""} onClick={() => onSelect(item.regionId)} role="button" tabIndex={0}
+          onMouseEnter={() => setHoveredRegionId(item.regionId)} onMouseLeave={() => setHoveredRegionId(null)}
+          onFocus={() => setFocusedRegionId(item.regionId)} onBlur={() => setFocusedRegionId(null)}
+          onKeyDown={event => { if (event.key === "Escape") { setHoveredRegionId(null); setFocusedRegionId(null); } if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(item.regionId); } }}>
           <path d={item.path} className={`tone-${index % 3}`} vectorEffect="non-scaling-stroke"/>
           <title>{item.name}</title>
-          {visibleLabels.has(item.name) && <text x={item.center[0]} y={item.center[1]}>{item.name}</text>}
         </g>)}
       </g>
     </svg> : mapState.status === "error" ? <div className="executive-map-error" role="status"><strong>Peta pratinjau belum tersedia.</strong><span>Buka Peta Lahan melalui Lihat Detail untuk pemantauan lengkap.</span></div> : <div className="executive-map-loading" role="status">Memuat peta BIG…</div>}</div>
+    {model.length > 0 && visibleName && <div className="executive-map-region-tooltip" role="status">{visibleName} <span>â€” Distrik</span></div>}
     <div className="executive-map-footer">
       <div className="executive-map-source"><span>◉</span> Badan Informasi Geospasial · WGS 84 · {mapState.sourceMode === "fallback" ? "cadangan BIG" : "BIG"}</div>
       <div className="map-selection"><MapPin size={19}/><span><b>{selectedLabel}</b><small>{hint}</small></span></div>

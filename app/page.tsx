@@ -21,12 +21,14 @@ import { createBigMapRequestController, createBigMapViewCallbacks, reduceBigMapV
 import { phaseColors, reduceMapBreadcrumb, riskColors, selectPhaseMonitoring, selectRiskMonitoring } from "@/lib/map-monitoring";
 import { defineLandMetric, formatPresentationValue, getValidationSummary, resolveTableRegionNames } from "@/lib/presentation-selectors";
 import { clampPan, clampZoom, fitToBounds, isMapDrag, prioritizedMapLabels, resetMapCamera } from "@/lib/visualization";
+import { createMapRegionOptions, districtIdForMapRegion, filterMapRegionOptions } from "@/lib/map-region-search";
 
 const activeRegionCounts = getActiveMonitoringRegionCounts();
 const canonicalDistrictNames = regions
   .filter(region => region.administrative_type === "district" && region.parent_id === "93.01")
   .map(region => region.name)
   .sort((a, b) => a.localeCompare(b, "id"));
+const mapRegionOptions = createMapRegionOptions(regions);
 
 const nav = [
   ["▦", "Ringkasan"],
@@ -531,8 +533,11 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
 }
 
 function LandPage() {
-  const { filters } = useDashboardFilters();
+  const { filters, setDistrict } = useDashboardFilters();
   const [layer, setLayer] = useState<LandLayer>("Luas Tanam");
+  const [regionDraft, setRegionDraft] = useState<string | null>(null);
+  const [regionSearchOpen, setRegionSearchOpen] = useState(false);
+  const [regionActiveIndex, setRegionActiveIndex] = useState(0);
   const [search, setSearch] = useState("");
   const [tablePage, setTablePage] = useState(1);
   const [categoryFilter, setCategoryFilter] = useState("Semua");
@@ -646,6 +651,18 @@ function LandPage() {
     const risk = riskProfile(key, filters.seasonId, regionId);
     return { scope, phase, risk };
   }, [filters.seasonId, mapContext]);
+  const activeMapRegion = filters.districtId ? getRegionById(filters.districtId) : null;
+  const regionQuery = regionDraft ?? (activeMapRegion ? `${activeMapRegion.name} â€” Distrik` : "Merauke â€” Kabupaten");
+  const matchingMapRegions = useMemo(() => {
+    const query = regionQuery.trim().toLocaleLowerCase("id-ID");
+    return filterMapRegionOptions(mapRegionOptions, query);
+  }, [regionQuery]);
+  const chooseMapRegion = (option: (typeof mapRegionOptions)[number]) => {
+    setDistrict(districtIdForMapRegion(option));
+    setRegionDraft(null);
+    setRegionSearchOpen(false);
+    setRegionActiveIndex(0);
+  };
   const entityLabel = mapContext.level === "province"
     ? "Kabupaten"
     : mapContext.selectedName
@@ -822,6 +839,30 @@ function LandPage() {
       <section className="land-layout">
         <article className="card large-map">
           <div className="card-title"><div><span className="live-dot" /> LAPISAN: {layer.toUpperCase()}</div><span>Batas administrasi resmi</span></div>
+          <div className="map-region-search" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setRegionSearchOpen(false); }}>
+            <label htmlFor="map-region-query">Cari wilayah pada peta</label>
+            <div className="map-region-search-field">
+              <span aria-hidden="true">âŒ•</span>
+              <input id="map-region-query" value={regionQuery} placeholder="Cari kabupaten atau distrikâ€¦" autoComplete="off"
+                role="combobox" aria-autocomplete="list" aria-expanded={regionSearchOpen} aria-controls="map-region-options"
+                aria-activedescendant={regionSearchOpen && matchingMapRegions[regionActiveIndex] ? `map-region-${matchingMapRegions[regionActiveIndex].id}` : undefined}
+                onFocus={() => setRegionSearchOpen(true)} onChange={event => { setRegionDraft(event.target.value); setRegionSearchOpen(true); setRegionActiveIndex(0); }}
+                onKeyDown={event => {
+                  if (event.key === "Escape") setRegionSearchOpen(false);
+                  if (event.key === "ArrowDown") { event.preventDefault(); setRegionSearchOpen(true); setRegionActiveIndex(index => Math.min(index + 1, matchingMapRegions.length - 1)); }
+                  if (event.key === "ArrowUp") { event.preventDefault(); setRegionActiveIndex(index => Math.max(0, index - 1)); }
+                  if (event.key === "Enter" && matchingMapRegions[regionActiveIndex]) { event.preventDefault(); chooseMapRegion(matchingMapRegions[regionActiveIndex]); }
+                }} />
+              {regionQuery && <button type="button" aria-label="Hapus pencarian wilayah" onClick={() => { setRegionDraft(""); setRegionSearchOpen(true); setRegionActiveIndex(0); }}>Ã—</button>}
+            </div>
+            {regionSearchOpen && <div id="map-region-options" className="map-region-options" role="listbox" aria-label="Wilayah Kabupaten Merauke">
+              {matchingMapRegions.length ? matchingMapRegions.map((option, index) => <button type="button" id={`map-region-${option.id}`} key={option.id} role="option"
+                aria-selected={option.typeLabel === "Kabupaten" ? !filters.districtId : filters.districtId === option.id}
+                className={index === regionActiveIndex ? "active" : ""} onMouseDown={event => event.preventDefault()} onMouseEnter={() => setRegionActiveIndex(index)} onClick={() => chooseMapRegion(option)}>
+                <strong>{option.name}</strong><span>â€” {option.typeLabel}</span>
+              </button>) : <p role="status">Wilayah tidak ditemukan.</p>}
+            </div>}
+          </div>
           <GeoAdministrativeMap layer={layer} onContextChange={handleMapContext} />
         </article>
         <aside className="land-insight">

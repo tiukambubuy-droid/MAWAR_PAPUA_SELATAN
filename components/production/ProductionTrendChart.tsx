@@ -12,7 +12,7 @@ export function ProductionTrendChart({ total, season }: { total: ProductionRecor
   const achievement = total.target ? total.gkg / total.target * 100 : 0;
   return <article className="card production-trend">
     <div className="production-card-title">TREN PRODUKSI GKG (KUMULATIF) — {season?.name.toUpperCase()}</div>
-    <MonitoringLineChart data={data} unit="ton" ariaLabel="Grafik kumulatif target, realisasi, dan proyeksi produksi GKG" />
+    <MonitoringLineChart data={data} unit="ton" ariaLabel="Grafik kumulatif target, realisasi, dan proyeksi produksi GKG" presentation="production" />
     <p>◴ Capaian {season?.display_name}: <b>{formatPercentId(achievement)}</b> dari target produksi GKG {season?.name}</p>
   </article>;
 }

@@ -141,7 +141,7 @@ test("executive map documents preview interactions and wires the production life
   assert.match(executive, /createBigMapRequestController<GeoFeature>/);
   assert.match(executive, /createBigMapViewCallbacks<GeoFeature>\(dispatchMapState\)/);
   assert.match(executive, /controller\.dispose\(\)/);
-  assert.match(executive, /onClick=\{\(\) => onSelect\(item\.name\)\}/);
+  assert.match(executive, /onClick=\{\(\) => onSelect\(item\.regionId\)\}/);
   assert.match(executive, /event\.key === "Enter" \|\| event\.key === " "/);
   assert.doesNotMatch(executive, /mapZoom|mapPan|zoomIn|zoomOut|resetZoom|isMapDrag/);
 });
