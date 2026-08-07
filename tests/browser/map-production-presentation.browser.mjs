@@ -205,6 +205,26 @@ try {
   await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Musim Tanam\"]')?.click()"); await waitFor(".season-line-card .monitoring-chart-summary");
   assert.equal(await evaluate("document.querySelectorAll('.season-line-card .monitoring-chart-summary-item').length"), 3);
   assert.equal(await evaluate("document.querySelectorAll('.season-line-card .chart-value-label').length"), 0);
+  await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Ketahanan Pangan\"]')?.click()"); await waitFor(".food-security-page");
+  const setFoodContext = async (season,district) => { await evaluate(`(()=>{const selects=[...document.querySelectorAll('.food-security-page select')],season=selects.find(node=>node.closest('label')?.innerText.startsWith('Musim')),district=selects.find(node=>node.closest('label')?.innerText.startsWith('Distrik'));season.value=${JSON.stringify(season)};season.dispatchEvent(new Event('change',{bubbles:true}));district.value=${JSON.stringify(district)};district.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(50); };
+  const resilienceValues = () => evaluate(`(()=>{const value=label=>[...document.querySelectorAll('.resilience-card>div>span')].find(node=>node.querySelector('b')?.innerText===label)?.querySelector('i')?.innerText;const kpi=label=>[...document.querySelectorAll('.food-security-page .monitoring-kpis article')].find(node=>node.querySelector('span')?.innerText===label)?.querySelector('strong')?.innerText;return{availability:value('Ketersediaan'),production:value('Capaian produksi'),irrigation:value('Kesiapan irigasi'),inputs:value('Pemenuhan sarana'),validation:value('Validasi'),total:kpi('Indikator Resiliensi')}})()`);
+  await setFoodContext("MT1-2026","");
+  assert.deepEqual(await resilienceValues(),{availability:"100%",production:"99,1%",irrigation:"86,2%",inputs:"92,6%",validation:"83,3%",total:"94,3 %"});
+  await setFoodContext("MT2-2026","");
+  assert.deepEqual(await resilienceValues(),{availability:"100%",production:"88,5%",irrigation:"87,2%",inputs:"90,5%",validation:"83,3%",total:"91,5 %"});
+  await setFoodContext("MT2-2026","93.01.05");
+  assert.deepEqual(await resilienceValues(),{availability:"100%",production:"88,3%",irrigation:"91%",inputs:"92,9%",validation:"100%",total:"94,2 %"});
+  await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Produksi\"]')?.click()"); await waitFor(".production-kpis");
+  const productionCrossPage=await evaluate(`(()=>{const value=label=>[...document.querySelectorAll('.production-kpis article')].find(node=>node.querySelector('small')?.innerText===label)?.querySelector('strong')?.innerText.replace(/\s+/g,' ').trim();return{gkg:value('Produksi GKG'),rice:value('Estimasi Beras'),achievement:value('Capaian Target')}})()`);
+  assert.deepEqual(productionCrossPage,{gkg:"26.553 ton",rice:"16.832 ton",achievement:"88,3 %"});
+  await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Infrastruktur dan Sarana\"]')?.click()"); await waitFor(".infrastructure-page");
+  await evaluate("document.querySelector('.infrastructure-page .monitoring-table tbody button').click()"); await waitFor(".monitoring-modal"); await sleep(30);
+  const irrigationCrossPage=await evaluate(`(()=>{const text=document.querySelector('.monitoring-modal-body').innerText;return{functional:text.includes('Tingkat fungsional\\n91 %'),water:text.includes('Kecukupan air\\n87 %')}})()`);
+  assert.deepEqual(irrigationCrossPage,{functional:true,water:true});
+  await evaluate("document.querySelector('.monitoring-modal footer button').click()"); await sleep(30);
+  await evaluate(`(()=>{const select=[...document.querySelectorAll('.infrastructure-page select')].find(node=>node.closest('label')?.innerText.startsWith('Distrik'));select.value='93.01.02';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(40);
+  assert.equal(await evaluate("document.querySelector('.infrastructure-page .monitoring-empty')?.innerText"),"Belum dipantau");
+  assert.equal(await evaluate("/0\s*(%|ton|km)/.test(document.querySelector('.infrastructure-page .monitoring-empty')?.innerText??'')"),false);
   assert.deepEqual(runtimeErrors, []);
   console.log(`Browser DOM PASS: ${viewports.map(([w,h])=>`${w}x${h}`).join(", ")}`);
 } finally {

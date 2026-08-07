@@ -44,7 +44,7 @@ test("production inputs preserve units and enforce distribution and equipment co
 });
 
 test("resilience production selector uses all five weighted components and refuses incomplete input", async () => {
-  const preamble = `const resilienceWeights={availability:.30,productionAchievement:.25,irrigationReadiness:.20,productionInputFulfillment:.15,validation:.10};const foodAvailabilityScore=()=>90;const selectFoodSecurity=()=>({monitored:true,aggregate:{approved:5,total:6}});const selectIrrigation=()=>({monitored:true,aggregate:{functionalPct:80,approved:5,total:6}});const selectProductionInputs=()=>({monitored:true,aggregate:{averageFulfillmentPct:70,approved:5,total:6}});const aggregateRegion=()=>({gkg_production_ton:90,gkg_production_target_ton:100});`;
+  const preamble = `const resilienceWeights={availability:.30,productionAchievement:.25,irrigationReadiness:.20,productionInputFulfillment:.15,validation:.10};const millingYield={rate:63.39};const calculateEstimatedRice=value=>value*.6339;const foodAvailabilityScore=()=>90;const selectFoodSecurity=()=>({monitored:true,aggregate:{approved:5,total:6}});const selectIrrigation=()=>({monitored:true,aggregate:{functionalPct:80,approved:5,total:6}});const selectProductionInputs=()=>({monitored:true,aggregate:{averageFulfillmentPct:70,approved:5,total:6}});const aggregateRegion=()=>({gkg_production_ton:90,gkg_production_target_ton:100});`;
   const resilience = await load("lib/resilience-data.ts", preamble);
   const result = resilience.selectOperationalResilience("MT2-2026");
   assert.equal(result.complete, true);
