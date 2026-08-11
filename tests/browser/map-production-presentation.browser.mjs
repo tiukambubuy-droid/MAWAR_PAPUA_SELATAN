@@ -1,32 +1,30 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
+import { executeBrowserLifecycle, waitForDevToolsActivePort, waitForHttpReady } from "./browser-harness.mjs";
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-const port = 32000 + process.pid % 1000;
-const debugPort = 33000 + process.pid % 1000;
-const origin = `http://127.0.0.1:${port}`;
-const profile = mkdtempSync(join(tmpdir(), "mawar-browser-test-"));
 const chromeCandidates = process.platform === "win32"
   ? ["C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"]
   : process.platform === "darwin"
     ? ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]
     : ["/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"];
-const chromePath = chromeCandidates.find(existsSync);
-if (!chromePath) throw new Error("Chrome/Chromium tidak tersedia untuk browser regression test.");
-
-const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port)], { stdio: "ignore", windowsHide: true });
-const chrome = spawn(chromePath, ["--headless=new", `--remote-debugging-port=${debugPort}`, "--remote-allow-origins=*", `--user-data-dir=${profile}`, "--disable-gpu", "--disable-software-rasterizer", "--disable-gpu-compositing", "--no-sandbox", "--no-first-run", "about:blank"], { stdio: "ignore", windowsHide: true });
-
-let socket;
-try {
-  for (let attempt = 0; attempt < 80; attempt++) { try { if ((await fetch(origin)).ok) break; } catch {} await sleep(100); }
-  let tabs;
-  for (let attempt = 0; attempt < 80; attempt++) { try { tabs = await fetch(`http://127.0.0.1:${debugPort}/json`).then(response => response.json()); break; } catch {} await sleep(100); }
-  assert.ok(tabs?.length, "Chrome DevTools endpoint harus tersedia");
-  socket = new WebSocket(tabs.find(tab => tab.type === "page").webSocketDebuggerUrl);
+let serverStdout="",serverStderr="",chromeStderr="";
+await executeBrowserLifecycle({
+ resolveChromeExecutable:()=>chromeCandidates.find(existsSync),
+ spawnServer:({port})=>{const child=spawn(process.execPath,["node_modules/next/dist/bin/next","start","-H","127.0.0.1","-p",String(port)],{cwd:process.cwd(),env:{...process.env,NODE_ENV:"production"},stdio:["ignore","pipe","pipe"],windowsHide:true});child.stdout.on("data",chunk=>{serverStdout+=chunk.toString()});child.stderr.on("data",chunk=>{serverStderr+=chunk.toString()});return child},
+ spawnChrome:({chromeExecutable,profilePath})=>{const child=spawn(chromeExecutable,["--headless=new","--remote-debugging-port=0","--remote-allow-origins=*",`--user-data-dir=${profilePath}`,"--disable-gpu","--disable-software-rasterizer","--disable-gpu-compositing","--disable-breakpad","--disable-crash-reporter","--disable-background-networking","--disable-component-update","--disable-sync","--force-prefers-reduced-motion","--no-sandbox","--no-first-run","--no-default-browser-check","about:blank"],{stdio:["ignore","ignore","pipe"],windowsHide:true});child.stderr.on("data",chunk=>{chromeStderr+=chunk.toString()});return child},
+ runBrowser:async({port,profileHandle,serverProcess:server,chromeProcess:chrome,getProcessError,registerBrowserClose})=>{
+  const origin=`http://127.0.0.1:${port}`,profile=profileHandle.profilePath;
+  let socket,closeBrowser;
+  await waitForHttpReady({url:origin,isProcessAlive:()=>server.exitCode===null&&!getProcessError(server),timeoutMs:60000,pollMs:150,fetchTimeoutMs:2000,processDetails:()=>({exitCode:server.exitCode,stdout:serverStdout,stderr:serverStderr})});
+  assert.equal(getProcessError(server),null,`Next test server gagal start (exit ${server.exitCode}): ${serverStderr.slice(-1000)}`);
+  const devtools=await waitForDevToolsActivePort({profileDir:profile,isProcessAlive:()=>chrome.exitCode===null&&!getProcessError(chrome),timeoutMs:15000});
+  const devtoolsOrigin=`http://127.0.0.1:${devtools.port}`;
+  await waitForHttpReady({url:`${devtoolsOrigin}/json`,isProcessAlive:()=>chrome.exitCode===null&&!getProcessError(chrome),timeoutMs:30000,pollMs:100,fetchTimeoutMs:1500,processDetails:()=>({exitCode:chrome.exitCode,stderr:chromeStderr})});
+  const tabs=await fetch(`${devtoolsOrigin}/json`).then(response=>response.json()),pageTab=tabs.find(tab=>tab.type==="page"&&typeof tab.webSocketDebuggerUrl==="string");
+  assert.ok(pageTab?.webSocketDebuggerUrl,`Chrome DevTools page endpoint tidak valid. stderr: ${chromeStderr.slice(-1000)}`);
+  socket = new WebSocket(pageTab.webSocketDebuggerUrl);
   await Promise.race([
     new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = () => reject(new Error("Chrome DevTools WebSocket gagal terhubung")); }),
     new Promise((_, reject) => setTimeout(() => reject(new Error("Chrome DevTools WebSocket timeout")), 5000)),
@@ -41,6 +39,11 @@ try {
     if (message.id && pending.has(message.id)) { pending.get(message.id)(message); pending.delete(message.id); }
   };
   const send = (method, params = {}) => new Promise(resolve => { const id = ++serial; pending.set(id, resolve); socket.send(JSON.stringify({ id, method, params })); });
+  closeBrowser=()=>send("Browser.close");
+  registerBrowserClose(async()=>{
+    if(closeBrowser)await Promise.race([closeBrowser(),sleep(1000)]);
+    if(socket){try{socket.close()}catch(error){console.error(`Gagal menutup CDP: ${error instanceof Error?error.message:String(error)}`)}}
+  });
   const evaluate = async expression => {
     const message = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
     if (message.result.exceptionDetails) throw new Error(message.result.exceptionDetails.exception?.description ?? message.result.exceptionDetails.text);
@@ -50,6 +53,22 @@ try {
     for (let attempt = 0; attempt < 80; attempt++) { if (await evaluate(`Boolean(document.querySelector(${JSON.stringify(selector)}))`)) return; await sleep(75); }
     throw new Error(`Selector tidak ditemukan: ${selector}`);
   };
+  const waitUntil = async (expression, message) => {
+    for (let attempt = 0; attempt < 80; attempt++) { if (await evaluate(expression)) return; await sleep(25); }
+    throw new Error(`Kondisi browser tidak tercapai: ${message}`);
+  };
+  const verifyPaginationReset = async ({ pageSelector, change, verify, reset, label }) => {
+    await waitUntil(`[...document.querySelectorAll('${pageSelector} .table-pagination button')].some(button=>button.textContent==='2')`, `${label}: halaman kedua tersedia`);
+    await evaluate(`(()=>{const button=[...document.querySelectorAll('${pageSelector} .table-pagination button')].find(node=>node.textContent==='2');button.click()})()`);
+    await waitUntil(`document.querySelector('${pageSelector} .table-pagination [aria-current=page]')?.textContent==='2'`, `${label}: halaman dua aktif`);
+    await evaluate(change);
+    await waitUntil(`document.querySelector('${pageSelector} .table-pagination [aria-current=page]')?.textContent==='1'`, `${label}: reset halaman satu`);
+    await waitUntil(verify, `${label}: isi tabel sesuai context`);
+    await evaluate(reset);
+    await waitUntil(`[...document.querySelectorAll('${pageSelector} .table-pagination button')].some(button=>button.textContent==='2')`, `${label}: dataset dipulihkan`);
+  };
+  const selectChange = (pageSelector, label, value) => `(()=>{const select=[...document.querySelectorAll('${pageSelector} select')].find(node=>node.closest('label')?.innerText.startsWith(${JSON.stringify(label)}));select.value=${JSON.stringify(value)};select.dispatchEvent(new Event('change',{bubbles:true}))})()`;
+  const inputChange = (pageSelector, value) => `(()=>{const input=document.querySelector('${pageSelector} input'),set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}))})()`;
   await send("Page.enable"); await send("Runtime.enable"); await send("Network.enable");
   await send("Network.setBlockedURLs", { urls: ["https://geoservices.big.go.id/*"] });
 
@@ -173,11 +192,11 @@ try {
     assert.equal(await evaluate("document.querySelector('.food-security-page .monitoring-empty')?.innerText"), "Belum dipantau");
     await evaluate(`(()=>{const select=[...document.querySelectorAll('.food-security-page select')].find(node=>node.closest('label')?.innerText.startsWith('Distrik'));select.value='93.01.05';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await waitFor(".food-security-page .monitoring-table tbody button");
     await evaluate("(()=>{const button=document.querySelector('.food-security-page .monitoring-table tbody button');button.dataset.qaTrigger='food';button.focus();button.click()})()"); await waitFor(".monitoring-modal[role=dialog]");
-    await sleep(80);
-    assert.equal(await evaluate("getComputedStyle(document.body).overflow"), "hidden");
-    assert.equal(await evaluate("document.activeElement===document.querySelector('.monitoring-modal')"), true);
-    await evaluate("document.querySelector('.monitoring-modal').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))"); await sleep(30);
-    assert.equal(await evaluate("document.activeElement?.dataset.qaTrigger"), "food");
+    await waitUntil("getComputedStyle(document.body).overflow==='hidden'", "body scroll lock modal Ketahanan Pangan");
+    await waitUntil("document.querySelector('.monitoring-modal').contains(document.activeElement)", "fokus masuk modal Ketahanan Pangan");
+    await evaluate("document.querySelector('.monitoring-modal').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");
+    await waitUntil("!document.querySelector('.monitoring-modal')", "modal Ketahanan Pangan tertutup");
+    await waitUntil("document.activeElement?.dataset.qaTrigger==='food'", "fokus kembali dari modal Ketahanan Pangan");
     assert.notEqual(await evaluate("getComputedStyle(document.body).overflow"), "hidden");
     if (width === 1440) {
       const foodUrl = await evaluate("location.href");
@@ -223,10 +242,74 @@ try {
       await evaluate("history.forward()"); await sleep(80); assert.ok(await evaluate("Boolean(document.querySelector('.food-security-page'))"));
       await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Infrastruktur dan Sarana\"]')?.click()"); await waitFor(".infrastructure-page");
     }
+    await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Risiko dan Iklim\"]')?.click()"); await waitFor(".risk-page");
+    assert.equal(await evaluate("document.querySelector('.risk-page h1')?.innerText"),"RISIKO & IKLIM");
+    assert.equal(await evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth + 1"),false);
+    assert.equal(await evaluate("/undefined|NaN/.test(document.querySelector('.risk-page').innerText)"),false);
+    await evaluate(`(()=>{const select=[...document.querySelectorAll('.risk-page select')].find(node=>node.closest('label')?.innerText.startsWith('Distrik'));select.value='';select.dispatchEvent(new Event('change',{bubbles:true}))})()`);await sleep(40);
+    assert.ok(await evaluate("document.querySelectorAll('.risk-page tbody tr').length>0"));
+    if([1440,768,390].includes(width)){
+      await evaluate("document.querySelector('.risk-page tbody button').click()"); await waitFor(".monitoring-modal"); await waitUntil("document.querySelector('.monitoring-modal').contains(document.activeElement)","fokus modal Risiko");
+      const riskModal=await evaluate(`(()=>{const dialog=document.querySelector('.monitoring-modal'),body=dialog.querySelector('.monitoring-modal-body'),r=dialog.getBoundingClientRect(),style=getComputedStyle(body),text=body.innerText;return{inside:r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight,font:parseFloat(style.fontSize),line:parseFloat(style.lineHeight)/parseFloat(style.fontSize),scroll:body.scrollHeight>=body.clientHeight,metadata:['Status monitoring','Status validasi','Source type','Data type','Updated at','Source reference','Formula skor','Cut-off status','Rekomendasi berbasis aturan'].every(x=>text.includes(x)),locked:getComputedStyle(document.body).overflow==='hidden'}})()`);
+      assert.ok(riskModal.inside&&riskModal.font>=12&&riskModal.line>=1.4&&riskModal.metadata&&riskModal.locked);
+      await evaluate("document.querySelector('.monitoring-modal footer button').click()"); await waitUntil("!document.querySelector('.monitoring-modal')","modal Risiko tertutup");
+    }
+    if(width===1440){
+      for(const method of['header','escape','overlay']){await evaluate("(()=>{const button=document.querySelector('.risk-page tbody button');button.dataset.qaTrigger='risk';button.focus();button.click()})()");await waitFor(".monitoring-modal");await waitUntil("document.querySelector('.monitoring-modal').contains(document.activeElement)","fokus modal Risiko "+method);if(method==='header')await evaluate("document.querySelector('.monitoring-modal header button').click()");else if(method==='escape')await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");else await evaluate("document.querySelector('.monitoring-modal-overlay').dispatchEvent(new MouseEvent('mousedown',{bubbles:true}))");await waitUntil("!document.querySelector('.monitoring-modal')","tutup modal Risiko "+method);await waitUntil("document.activeElement?.dataset.qaTrigger==='risk'","restore fokus Risiko "+method)}
+      await verifyPaginationReset({pageSelector:'.risk-page',change:inputChange('.risk-page','Semangga'),verify:"[...document.querySelectorAll('.risk-page tbody tr')].every(row=>row.cells[0].textContent.includes('Semangga'))",reset:inputChange('.risk-page',''),label:'Risiko pencarian'});
+      await verifyPaginationReset({pageSelector:'.risk-page',change:selectChange('.risk-page','Jenis risiko','Kekeringan'),verify:"[...document.querySelectorAll('.risk-page tbody tr')].every(row=>row.cells[1].textContent==='Kekeringan')",reset:selectChange('.risk-page','Jenis risiko','all'),label:'Risiko jenis'});
+      await verifyPaginationReset({pageSelector:'.risk-page',change:selectChange('.risk-page','Tingkat','Kritis'),verify:"[...document.querySelectorAll('.risk-page tbody tr')].every(row=>row.cells[5].textContent==='Kritis')",reset:selectChange('.risk-page','Tingkat','all'),label:'Risiko tingkat'});
+      await verifyPaginationReset({pageSelector:'.risk-page',change:selectChange('.risk-page','Status peringatan','Kritis'),verify:"[...document.querySelectorAll('.risk-page tbody tr')].every(row=>row.cells[6].textContent==='Kritis')",reset:selectChange('.risk-page','Status peringatan','all'),label:'Risiko warning'});
+      await verifyPaginationReset({pageSelector:'.risk-page',change:selectChange('.risk-page','Validasi','approved'),verify:"[...document.querySelectorAll('.risk-page tbody tr')].every(row=>row.cells[7].textContent==='approved')",reset:selectChange('.risk-page','Validasi','all'),label:'Risiko validasi'});
+      await verifyPaginationReset({pageSelector:'.risk-page',change:"document.querySelector('.risk-page th button').click()",verify:"document.querySelector('.risk-page th')?.getAttribute('aria-sort')!=='none'",reset:"void 0",label:'Risiko sorting'});
+      await verifyPaginationReset({pageSelector:'.risk-page',change:selectChange('.risk-page','Musim','MT1-2026'),verify:"[...document.querySelectorAll('.risk-page select')].find(node=>node.closest('label')?.innerText.startsWith('Musim')).value==='MT1-2026'",reset:selectChange('.risk-page','Musim','MT2-2026'),label:'Risiko season'});
+      await verifyPaginationReset({pageSelector:'.risk-page',change:selectChange('.risk-page','Distrik','93.01.05'),verify:"[...document.querySelectorAll('.risk-page tbody tr')].every(row=>row.cells[0].textContent.includes('Semangga'))",reset:selectChange('.risk-page','Distrik',''),label:'Risiko district'});
+      await evaluate(inputChange('.risk-page','tidak-ada'));await waitUntil("document.querySelector('.risk-page .table-empty')?.textContent==='Tidak ada data sesuai filter.'","filter nol Risiko");assert.equal(await evaluate("Boolean(document.querySelector('.risk-page .table-pagination'))"),false);await evaluate(inputChange('.risk-page',''));await waitFor(".risk-page tbody button");
+      await evaluate("document.querySelector('.risk-page tbody button').click()");await waitFor(".monitoring-modal");await evaluate(`(()=>{const select=[...document.querySelectorAll('.risk-page select')].find(node=>node.closest('label')?.innerText.startsWith('Musim'));select.value='MT1-2026';select.dispatchEvent(new Event('change',{bubbles:true}))})()`);await waitUntil("!document.querySelector('.monitoring-modal')","modal Risiko tertutup oleh season");
+      await evaluate(`(()=>{const select=[...document.querySelectorAll('.risk-page select')].find(node=>node.closest('label')?.innerText.startsWith('Distrik'));select.value='93.01.02';select.dispatchEvent(new Event('change',{bubbles:true}))})()`);await waitUntil("document.querySelector('.risk-page .compact-empty-state h2')?.textContent==='Wilayah belum dipantau'","empty-state Risiko not monitored");assert.equal(await evaluate("Boolean(document.querySelector('.risk-page .monitoring-kpis,.risk-page table,.risk-page .table-pagination'))"),false);
+      await evaluate(`(()=>{const select=[...document.querySelectorAll('.risk-page select')].find(node=>node.closest('label')?.innerText.startsWith('Distrik'));select.value='';select.dispatchEvent(new Event('change',{bubbles:true}))})()`);await waitFor(".risk-page tbody button");
+      await evaluate(`(()=>{const select=[...document.querySelectorAll('.risk-page select')].find(node=>node.closest('label')?.innerText.startsWith('Musim'));select.value='MT2-2026';select.dispatchEvent(new Event('change',{bubbles:true}))})()`);await waitUntil("location.search.includes('season=MT2-2026')&&document.querySelector('.risk-page select')?.value==='MT2-2026'","Risiko dipulihkan ke MT II");
+    }
+    await evaluate(`(()=>{const select=[...document.querySelectorAll('.risk-page select')].find(node=>node.closest('label')?.innerText.startsWith('Musim'));if(select.value!=='MT2-2026'){select.value='MT2-2026';select.dispatchEvent(new Event('change',{bubbles:true}))}})()`);await waitUntil("document.querySelector('.risk-page select')?.value==='MT2-2026'","konteks MT II sebelum Kolaborasi");
+    await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Kolaborasi OPD\"]')?.click()"); await waitFor(".collaboration-page");
+    assert.equal(await evaluate("document.querySelector('.collaboration-page h1')?.innerText"),"KOLABORASI OPD & INSTANSI");
+    const collaborationNetwork=await evaluate(`(()=>{const canvas=document.querySelector('.network-canvas'),visible=getComputedStyle(canvas).display!=='none',nodes=[...document.querySelectorAll('.network-svg-node')],edges=document.querySelectorAll('.network-edges line').length,mobile=document.querySelectorAll('.network-mobile-list li').length,cr=canvas.getBoundingClientRect(),boxes=nodes.map(node=>{const r=node.getBoundingClientRect(),text=node.querySelector('text').getBBox(),rect=node.querySelector('rect').getBBox();return{left:r.left,top:r.top,right:r.right,bottom:r.bottom,labelInside:text.x>=rect.x-1&&text.x+text.width<=rect.x+rect.width+1}});return{visible,nodes:nodes.length,edges,mobile,inside:boxes.every(r=>r.left>=cr.left-1&&r.right<=cr.right+1&&r.top>=cr.top-1&&r.bottom<=cr.bottom+1),labels:boxes.every(r=>r.labelInside),overlap:boxes.some((a,i)=>boxes.some((b,j)=>j>i&&a.left<b.right-1&&a.right>b.left+1&&a.top<b.bottom-1&&a.bottom>b.top+1))}})()`);
+    if(width<=600)assert.deepEqual([collaborationNetwork.visible,collaborationNetwork.mobile],[false,8],`${width}x${height}`);else assert.deepEqual([collaborationNetwork.visible,collaborationNetwork.nodes,collaborationNetwork.edges,collaborationNetwork.inside,collaborationNetwork.labels,collaborationNetwork.overlap],[true,7,8,true,true,false],`${width}x${height}`);
+    assert.equal(await evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth + 1"),false);
+    assert.equal(await evaluate("/undefined|NaN/.test(document.querySelector('.collaboration-page').innerText)"),false);
+    if([1440,768,390].includes(width)){
+      await evaluate("document.querySelector('.collaboration-page tbody button').click()");await waitFor(".monitoring-modal");await waitUntil("document.querySelector('.monitoring-modal').contains(document.activeElement)","fokus modal Kolaborasi");
+      const collaborationModal=await evaluate(`(()=>{const dialog=document.querySelector('.monitoring-modal'),body=dialog.querySelector('.monitoring-modal-body'),r=dialog.getBoundingClientRect(),style=getComputedStyle(body),text=body.innerText;return{inside:r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight,font:parseFloat(style.fontSize),line:parseFloat(style.lineHeight)/parseFloat(style.fontSize),metadata:['ID kegiatan','Judul kegiatan','Tanggal mulai','Tenggat','Tanggal selesai','Status monitoring','Status resolusi','referensi berhasil diverifikasi'].every(x=>text.includes(x)),locked:getComputedStyle(document.body).overflow==='hidden'}})()`);assert.ok(collaborationModal.inside&&collaborationModal.font>=12&&collaborationModal.line>=1.4&&collaborationModal.metadata&&collaborationModal.locked);
+      await evaluate("document.querySelector('.monitoring-modal header button').click()");await waitUntil("!document.querySelector('.monitoring-modal')","modal Kolaborasi tertutup X");
+    }
+    if(width===1440){
+      for(const method of['footer','escape','overlay']){await evaluate("(()=>{const button=document.querySelector('.collaboration-page tbody button');button.dataset.qaTrigger='collaboration';button.focus();button.click()})()");await waitFor(".monitoring-modal");await waitUntil("document.querySelector('.monitoring-modal').contains(document.activeElement)","fokus modal Kolaborasi "+method);if(method==='footer')await evaluate("document.querySelector('.monitoring-modal footer button').click()");else if(method==='escape')await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");else await evaluate("document.querySelector('.monitoring-modal-overlay').dispatchEvent(new MouseEvent('mousedown',{bubbles:true}))");await waitUntil("!document.querySelector('.monitoring-modal')","tutup modal Kolaborasi "+method);await waitUntil("document.activeElement?.dataset.qaTrigger==='collaboration'","restore fokus Kolaborasi "+method)}
+      await verifyPaginationReset({pageSelector:'.collaboration-page',change:inputChange('.collaboration-page','Koordinasi'),verify:"[...document.querySelectorAll('.collaboration-page tbody tr')].every(row=>row.cells[0].textContent.includes('Koordinasi'))",reset:inputChange('.collaboration-page',''),label:'Kolaborasi pencarian'});
+      await verifyPaginationReset({pageSelector:'.collaboration-page',change:selectChange('.collaboration-page','Domain','Risiko & Iklim'),verify:"[...document.querySelectorAll('.collaboration-page tbody tr')].every(row=>row.cells[1].textContent==='Risiko & Iklim')",reset:selectChange('.collaboration-page','Domain','all'),label:'Kolaborasi domain'});
+      await verifyPaginationReset({pageSelector:'.collaboration-page',change:selectChange('.collaboration-page','Prioritas','Kritis'),verify:"[...document.querySelectorAll('.collaboration-page tbody tr')].every(row=>row.cells[4].textContent==='Kritis')",reset:selectChange('.collaboration-page','Prioritas','all'),label:'Kolaborasi prioritas'});
+      await verifyPaginationReset({pageSelector:'.collaboration-page',change:selectChange('.collaboration-page','Status','Berjalan'),verify:"[...document.querySelectorAll('.collaboration-page tbody tr')].every(row=>row.cells[7].textContent==='Berjalan')",reset:selectChange('.collaboration-page','Status','all'),label:'Kolaborasi status'});
+      await verifyPaginationReset({pageSelector:'.collaboration-page',change:selectChange('.collaboration-page','Validasi','approved'),verify:"document.querySelectorAll('.collaboration-page tbody tr').length>0",reset:selectChange('.collaboration-page','Validasi','all'),label:'Kolaborasi validasi'});
+      await verifyPaginationReset({pageSelector:'.collaboration-page',change:"document.querySelector('.collaboration-page th button').click()",verify:"document.querySelector('.collaboration-page th')?.getAttribute('aria-sort')!=='none'",reset:"void 0",label:'Kolaborasi sorting'});
+      await verifyPaginationReset({pageSelector:'.collaboration-page',change:selectChange('.collaboration-page','Musim','MT1-2026'),verify:"[...document.querySelectorAll('.collaboration-page select')].find(node=>node.closest('label')?.innerText.startsWith('Musim')).value==='MT1-2026'",reset:selectChange('.collaboration-page','Musim','MT2-2026'),label:'Kolaborasi season'});
+      await verifyPaginationReset({pageSelector:'.collaboration-page',change:selectChange('.collaboration-page','Distrik','93.01.05'),verify:"[...document.querySelectorAll('.collaboration-page tbody tr')].every(row=>row.cells[2].textContent.includes('Semangga'))",reset:selectChange('.collaboration-page','Distrik',''),label:'Kolaborasi district'});
+      await evaluate(inputChange('.collaboration-page','tidak-ada'));await waitUntil("document.querySelector('.collaboration-page .monitoring-table .table-empty')?.textContent==='Tidak ada data sesuai filter.'","filter nol Kolaborasi");assert.equal(await evaluate("document.querySelector('.collaboration-network .table-empty')?.textContent"),"Belum ada hubungan kegiatan pada konteks terpilih.");await evaluate(inputChange('.collaboration-page',''));await waitFor(".collaboration-page tbody button");
+      await evaluate("document.querySelector('.collaboration-page tbody button').click()");await waitFor(".monitoring-modal");await evaluate(`(()=>{const select=[...document.querySelectorAll('.collaboration-page select')].find(node=>node.closest('label')?.innerText.startsWith('Distrik'));select.value='93.01.05';select.dispatchEvent(new Event('change',{bubbles:true}))})()`);await waitUntil("!document.querySelector('.monitoring-modal')","modal Kolaborasi tertutup oleh district");
+      await waitUntil("document.querySelectorAll('.collaboration-page .network-svg-node').length===3&&document.querySelectorAll('.network-edges line').length===2","network Semangga");
+      await evaluate(`(()=>{const select=[...document.querySelectorAll('.collaboration-page select')].find(node=>node.closest('label')?.innerText.startsWith('Distrik'));select.value='93.01.07';select.dispatchEvent(new Event('change',{bubbles:true}))})()`);await waitUntil("document.querySelector('.collaboration-page .compact-empty-state h2')?.textContent==='Belum ada kegiatan kolaborasi'","empty monitored tanpa kegiatan");assert.equal(await evaluate("Boolean(document.querySelector('.collaboration-page .monitoring-kpis,.collaboration-page table,.collaboration-page .collaboration-network'))"),false);
+      await evaluate(`(()=>{const select=[...document.querySelectorAll('.collaboration-page select')].find(node=>node.closest('label')?.innerText.startsWith('Distrik'));select.value='93.01.02';select.dispatchEvent(new Event('change',{bubbles:true}))})()`);await waitUntil("document.querySelector('.collaboration-page .compact-empty-state h2')?.textContent==='Wilayah belum dipantau'","empty Kolaborasi not monitored");assert.equal(await evaluate("Boolean(document.querySelector('.collaboration-page .monitoring-kpis,.collaboration-page table,.collaboration-page .collaboration-network,.collaboration-page .table-pagination'))"),false);
+      await evaluate(`(()=>{const selects=[...document.querySelectorAll('.collaboration-page select')],district=selects.find(node=>node.closest('label')?.innerText.startsWith('Distrik')),season=selects.find(node=>node.closest('label')?.innerText.startsWith('Musim'));district.value='';district.dispatchEvent(new Event('change',{bubbles:true}));season.value='MT1-2026';season.dispatchEvent(new Event('change',{bubbles:true}))})()`);await waitUntil("document.querySelectorAll('.collaboration-page .network-svg-node').length===5&&document.querySelectorAll('.network-edges line').length===4","network MT I Kabupaten");
+      await evaluate(`(()=>{const season=[...document.querySelectorAll('.collaboration-page select')].find(node=>node.closest('label')?.innerText.startsWith('Musim'));season.value='MT2-2026';season.dispatchEvent(new Event('change',{bubbles:true}))})()`);await waitUntil("document.querySelectorAll('.collaboration-page .network-svg-node').length===7","network MT II Kabupaten dipulihkan");
+    } else {await evaluate(`(()=>{const select=[...document.querySelectorAll('.collaboration-page select')].find(node=>node.closest('label')?.innerText.startsWith('Distrik'));select.value='93.01.05';select.dispatchEvent(new Event('change',{bubbles:true}))})()`);await sleep(30);}
     assert.equal(await evaluate("document.documentElement.scrollWidth > document.documentElement.clientWidth + 1"), false);
   }
 
   await send("Emulation.setDeviceMetricsOverride", { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+  await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Risiko dan Iklim\"]')?.click()");await waitFor(".risk-page");
+  await evaluate(`(()=>{const selects=[...document.querySelectorAll('.risk-page select')],season=selects.find(node=>node.closest('label')?.innerText.startsWith('Musim')),district=selects.find(node=>node.closest('label')?.innerText.startsWith('Distrik'));season.value='MT1-2026';season.dispatchEvent(new Event('change',{bubbles:true}));district.value='93.01.05';district.dispatchEvent(new Event('change',{bubbles:true}))})()`);await waitUntil("location.search.includes('season=MT1-2026')&&location.search.includes('district=93.01.05')","URL Risiko MT I Semangga");
+  await send("Page.reload");await waitFor(".risk-page");await waitUntil("document.querySelector('.risk-page select')?.value==='MT1-2026'&&[...document.querySelectorAll('.risk-page select')].some(x=>x.value==='93.01.05')","refresh Risiko memulihkan context");assert.equal(await evaluate("location.hash"),"#view=risiko-iklim");
+  await evaluate(`(()=>{const season=[...document.querySelectorAll('.risk-page select')].find(node=>node.closest('label')?.innerText.startsWith('Musim'));season.value='MT2-2026';season.dispatchEvent(new Event('change',{bubbles:true}))})()`);await waitUntil("location.search.includes('season=MT2-2026')","Risiko MT II");await evaluate("history.back()");await waitUntil("location.search.includes('season=MT1-2026')","Back Risiko MT I");await evaluate("history.forward()");await waitUntil("location.search.includes('season=MT2-2026')","Forward Risiko MT II");
+  await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Kolaborasi OPD\"]')?.click()");await waitFor(".collaboration-page");await send("Page.reload");await waitFor(".collaboration-page");assert.equal(await evaluate("location.hash"),"#view=kolaborasi-opd");assert.ok(await evaluate("location.search.includes('district=93.01.05')"));
+  await evaluate(`(()=>{const district=[...document.querySelectorAll('.collaboration-page select')].find(node=>node.closest('label')?.innerText.startsWith('Distrik'));district.value='';district.dispatchEvent(new Event('change',{bubbles:true}))})()`);await waitUntil("!location.search.includes('district=')","Kolaborasi Kabupaten");await evaluate("history.back()");await waitUntil("location.search.includes('district=93.01.05')","Back Kolaborasi Semangga");await evaluate("history.forward()");await waitUntil("!location.search.includes('district=')","Forward Kolaborasi Kabupaten");await evaluate(`(()=>{const district=[...document.querySelectorAll('.collaboration-page select')].find(node=>node.closest('label')?.innerText.startsWith('Distrik'));district.value='93.01.05';district.dispatchEvent(new Event('change',{bubbles:true}))})()`);await waitUntil("location.search.includes('district=93.01.05')","Semangga dipulihkan untuk regresi lintas halaman");
   await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Peta Lahan\"]')?.click()"); await waitFor("#map-region-query");
   assert.equal(await evaluate("document.querySelector('#map-region-query').value"), "Semangga \u2014 Distrik");
   assert.equal(await evaluate("document.querySelectorAll('.map-region-search .lucide-search').length"), 1);
@@ -282,9 +365,5 @@ try {
   assert.deepEqual(runtimeErrors, []);
   console.log(`Food layout metrics: ${JSON.stringify(foodLayoutMetrics)}`);
   console.log(`Browser DOM PASS: ${viewports.map(([w,h])=>`${w}x${h}`).join(", ")}`);
-} finally {
-  try { socket?.close(); } catch {}
-  server.kill(); chrome.kill();
-  await sleep(150);
-  try { rmSync(profile, { recursive: true, force: true }); } catch {}
-}
+ }
+});

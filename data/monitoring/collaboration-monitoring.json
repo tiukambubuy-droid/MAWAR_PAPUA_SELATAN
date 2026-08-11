@@ -1,0 +1,277 @@
+{
+  "metadata": {
+    "data_type": "simulation",
+    "source_type": "prototype",
+    "cutoff_date": "2026-07-24"
+  },
+  "institutions": [
+    {
+      "id": "SETDA",
+      "name": "Sekretariat Daerah",
+      "institution_type": "OPD",
+      "role": "Koordinator",
+      "monitoring_status": "monitored",
+      "validation_status": "approved",
+      "source_type": "prototype",
+      "data_type": "simulation"
+    },
+    {
+      "id": "DISTAN",
+      "name": "Dinas Pertanian",
+      "institution_type": "OPD",
+      "role": "Teknis produksi",
+      "monitoring_status": "monitored",
+      "validation_status": "approved",
+      "source_type": "prototype",
+      "data_type": "simulation"
+    },
+    {
+      "id": "PUPR",
+      "name": "Dinas PUPR",
+      "institution_type": "OPD",
+      "role": "Teknis irigasi",
+      "monitoring_status": "monitored",
+      "validation_status": "approved",
+      "source_type": "prototype",
+      "data_type": "simulation"
+    },
+    {
+      "id": "BAPPEDA",
+      "name": "Bappeda",
+      "institution_type": "OPD",
+      "role": "Perencanaan",
+      "monitoring_status": "monitored",
+      "validation_status": "approved",
+      "source_type": "prototype",
+      "data_type": "simulation"
+    },
+    {
+      "id": "BPBD",
+      "name": "BPBD",
+      "institution_type": "OPD",
+      "role": "Kebencanaan",
+      "monitoring_status": "monitored",
+      "validation_status": "approved",
+      "source_type": "prototype",
+      "data_type": "simulation"
+    },
+    {
+      "id": "BMKG",
+      "name": "BMKG",
+      "institution_type": "Instansi vertikal",
+      "role": "Rujukan iklim",
+      "monitoring_status": "monitored",
+      "validation_status": "approved",
+      "source_type": "prototype",
+      "data_type": "simulation"
+    },
+    {
+      "id": "BULOG",
+      "name": "Bulog",
+      "institution_type": "BUMN",
+      "role": "Stok pangan",
+      "monitoring_status": "monitored",
+      "validation_status": "approved",
+      "source_type": "prototype",
+      "data_type": "simulation"
+    }
+  ],
+  "activities": [
+    {
+      "id": "COL-001",
+      "title": "Koordinasi distribusi air Semangga",
+      "season_id": "MT2-2026",
+      "region_id": "93.01.05",
+      "domain": "Irigasi",
+      "coordinator_institution_id": "SETDA",
+      "participant_institution_ids": [
+        "PUPR",
+        "DISTAN"
+      ],
+      "priority": "Kritis",
+      "status": "Berjalan",
+      "progress_percent": 70,
+      "start_date": "2026-07-22",
+      "due_date": "2026-08-05",
+      "completed_at": null,
+      "next_action": "Verifikasi jaringan dan jadwal distribusi air",
+      "validation_status": "approved",
+      "monitoring_status": "monitored",
+      "source_type": "prototype",
+      "data_type": "simulation",
+      "updated_at": "2026-07-24T22:42:00+09:00",
+      "notes": "Koordinasi prototipe.",
+      "related_records": [
+        {
+          "domain": "irrigation",
+          "record_id": "IR-MT2-0105"
+        },
+        {
+          "domain": "climate_risk",
+          "record_id": "CR-MT2-0105"
+        }
+      ]
+    },
+    {
+      "id": "COL-002",
+      "title": "Verifikasi observasi OPT Tanah Miring",
+      "season_id": "MT2-2026",
+      "region_id": "93.01.06",
+      "domain": "Risiko & Iklim",
+      "coordinator_institution_id": "DISTAN",
+      "participant_institution_ids": [
+        "SETDA"
+      ],
+      "priority": "Tinggi",
+      "status": "Berjalan",
+      "progress_percent": 55,
+      "start_date": "2026-07-21",
+      "due_date": "2026-08-03",
+      "completed_at": null,
+      "next_action": "Identifikasi organisme pengganggu berdasarkan observasi",
+      "validation_status": "approved",
+      "monitoring_status": "monitored",
+      "source_type": "prototype",
+      "data_type": "simulation",
+      "updated_at": "2026-07-24T22:42:00+09:00",
+      "notes": "Koordinasi prototipe.",
+      "related_records": [
+        {
+          "domain": "climate_risk",
+          "record_id": "CR-MT2-0106"
+        }
+      ]
+    },
+    {
+      "id": "COL-003",
+      "title": "Pemantauan stok pangan Kabupaten",
+      "season_id": "MT2-2026",
+      "region_id": "93.01",
+      "domain": "Ketahanan Pangan",
+      "coordinator_institution_id": "SETDA",
+      "participant_institution_ids": [
+        "BULOG",
+        "BAPPEDA"
+      ],
+      "priority": "Sedang",
+      "status": "Selesai",
+      "progress_percent": 100,
+      "start_date": "2026-07-01",
+      "due_date": "2026-07-24",
+      "completed_at": "2026-07-24",
+      "next_action": null,
+      "validation_status": "approved",
+      "monitoring_status": "monitored",
+      "source_type": "prototype",
+      "data_type": "simulation",
+      "updated_at": "2026-07-24T22:42:00+09:00",
+      "notes": "Rekap prototipe.",
+      "related_records": [
+        {
+          "domain": "food_security",
+          "record_id": "FS-MT2-0105"
+        }
+      ]
+    },
+    {
+      "id": "COL-004",
+      "title": "Tindak lanjut risiko kekeringan Malind",
+      "season_id": "MT2-2026",
+      "region_id": "93.01.14",
+      "domain": "Risiko & Iklim",
+      "coordinator_institution_id": "BPBD",
+      "participant_institution_ids": [
+        "BMKG",
+        "PUPR",
+        "DISTAN"
+      ],
+      "priority": "Kritis",
+      "status": "Tertunda",
+      "progress_percent": 30,
+      "start_date": "2026-07-23",
+      "due_date": "2026-08-08",
+      "completed_at": null,
+      "next_action": "Menunggu validasi lapangan",
+      "validation_status": "pending",
+      "monitoring_status": "monitored",
+      "source_type": "prototype",
+      "data_type": "simulation",
+      "updated_at": "2026-07-24T22:42:00+09:00",
+      "notes": "Tindak lanjut wajib setelah validasi.",
+      "related_records": [
+        {
+          "domain": "climate_risk",
+          "record_id": "CR-MT2-0114"
+        }
+      ]
+    }
+  ],
+  "activities_mt1": [
+    {
+      "id": "COL-MT1-001",
+      "title": "Validasi produksi akhir MT I",
+      "season_id": "MT1-2026",
+      "region_id": "93.01",
+      "domain": "Validasi Data",
+      "coordinator_institution_id": "SETDA",
+      "participant_institution_ids": [
+        "DISTAN",
+        "BAPPEDA"
+      ],
+      "priority": "Tinggi",
+      "status": "Selesai",
+      "progress_percent": 100,
+      "start_date": "2026-03-20",
+      "due_date": "2026-03-31",
+      "completed_at": "2026-03-31",
+      "next_action": null,
+      "validation_status": "approved",
+      "monitoring_status": "monitored",
+      "source_type": "prototype",
+      "data_type": "simulation",
+      "updated_at": "2026-03-31T16:00:00+09:00",
+      "notes": "Validasi prototipe.",
+      "related_records": [
+        {
+          "domain": "food_security",
+          "record_id": "FS-MT1-0105"
+        }
+      ]
+    },
+    {
+      "id": "COL-MT1-002",
+      "title": "Koordinasi drainase Merauke",
+      "season_id": "MT1-2026",
+      "region_id": "93.01.01",
+      "domain": "Irigasi",
+      "coordinator_institution_id": "PUPR",
+      "participant_institution_ids": [
+        "SETDA",
+        "BPBD"
+      ],
+      "priority": "Tinggi",
+      "status": "Selesai",
+      "progress_percent": 100,
+      "start_date": "2026-03-20",
+      "due_date": "2026-03-31",
+      "completed_at": "2026-03-31",
+      "next_action": null,
+      "validation_status": "approved",
+      "monitoring_status": "monitored",
+      "source_type": "prototype",
+      "data_type": "simulation",
+      "updated_at": "2026-03-31T16:00:00+09:00",
+      "notes": "Koordinasi prototipe.",
+      "related_records": [
+        {
+          "domain": "irrigation",
+          "record_id": "IR-MT1-0101"
+        },
+        {
+          "domain": "climate_risk",
+          "record_id": "CR-MT1-0101"
+        }
+      ]
+    }
+  ]
+}

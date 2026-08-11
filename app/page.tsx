@@ -4,12 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
-import { BarChart3, ChevronDown, CloudSun, FileText, LayoutDashboard, Map, Search, ShieldCheck, Sprout, Wrench, X } from "lucide-react";
+import { BarChart3, ChevronDown, CloudSun, FileText, LayoutDashboard, Map, Network, Search, ShieldCheck, Sprout, Wrench, X } from "lucide-react";
 import SeasonCommandCenter from "@/components/season/SeasonPage";
 import ProductionCommandCenter from "@/components/production/ProductionPage";
 import ExecutiveDashboard from "@/components/overview/ExecutiveDashboard";
 import FoodSecurityPage from "@/components/food-security/FoodSecurityPage";
 import InfrastructurePage from "@/components/infrastructure/InfrastructurePage";
+import RiskClimatePage from "@/components/risk/RiskClimatePage";
+import CollaborationPage from "@/components/collaboration/CollaborationPage";
 import { DashboardFilterProvider, useDashboardFilters } from "@/components/DashboardFilterProvider";
 import {
   aggregateRegion,
@@ -32,7 +34,7 @@ const canonicalDistrictNames = regions
   .map(region => region.name)
   .sort((a, b) => a.localeCompare(b, "id"));
 const mapRegionOptions = createMapRegionOptions(regions);
-const viewSlugs: Record<string,string> = { "Ringkasan":"ringkasan", "Peta Lahan":"peta-lahan", "Musim Tanam":"musim-tanam", "Produksi":"produksi", "Ketahanan Pangan":"ketahanan-pangan", "Infrastruktur & Sarana":"infrastruktur-sarana" };
+const viewSlugs: Record<string,string> = { "Ringkasan":"ringkasan", "Peta Lahan":"peta-lahan", "Musim Tanam":"musim-tanam", "Produksi":"produksi", "Ketahanan Pangan":"ketahanan-pangan", "Infrastruktur & Sarana":"infrastruktur-sarana", "Risiko & Iklim":"risiko-iklim", "Kolaborasi OPD":"kolaborasi-opd" };
 
 const nav = [
   { Icon: LayoutDashboard, label: "Ringkasan", enabled: true },
@@ -41,7 +43,8 @@ const nav = [
   { Icon: BarChart3, label: "Produksi", enabled: true },
   { Icon: ShieldCheck, label: "Ketahanan Pangan", enabled: true },
   { Icon: Wrench, label: "Infrastruktur & Sarana", enabled: true },
-  { Icon: CloudSun, label: "Risiko & Iklim", enabled: false },
+  { Icon: CloudSun, label: "Risiko & Iklim", enabled: true },
+  { Icon: Network, label: "Kolaborasi OPD", enabled: true },
   { Icon: FileText, label: "Laporan", enabled: false },
 ];
 
@@ -994,7 +997,7 @@ function HomeContent() {
               key={label}
               className={activeNav === label ? "nav-item active" : "nav-item"}
               onClick={() => enabled && navigate(label)}
-              aria-label={label === "Infrastruktur & Sarana" ? "Buka halaman Infrastruktur dan Sarana" : `Buka halaman ${label}`}
+              aria-label={label === "Infrastruktur & Sarana" ? "Buka halaman Infrastruktur dan Sarana" : label === "Risiko & Iklim" ? "Buka halaman Risiko dan Iklim" : `Buka halaman ${label}`}
               aria-current={activeNav === label ? "page" : undefined}
               aria-disabled={!enabled}
             >
@@ -1035,6 +1038,8 @@ function HomeContent() {
           {activeNav === "Produksi" && <ProductionPage />}
           {activeNav === "Ketahanan Pangan" && <FoodSecurityPage />}
           {activeNav === "Infrastruktur & Sarana" && <InfrastructurePage />}
+          {activeNav === "Risiko & Iklim" && <RiskClimatePage />}
+          {activeNav === "Kolaborasi OPD" && <CollaborationPage />}
 
           <footer><span>Data pada prototipe bersifat simulasi dan perlu divalidasi sebelum digunakan sebagai dasar kebijakan.</span><strong>© 2026 Pemerintah Provinsi Papua Selatan</strong></footer>
         </div>
