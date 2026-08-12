@@ -975,7 +975,7 @@ function HomeContent() {
     });
   }, []);
   const navigateFromDrawer = useCallback((label:string) => {
-    const usesDrawer = window.matchMedia("(max-width: 900px)").matches;
+    const usesDrawer = window.matchMedia("(max-width: 900px), (max-height: 720px)").matches;
     navigate(label);
     if (!usesDrawer) return;
     closeNavigation(false);
@@ -988,6 +988,22 @@ function HomeContent() {
   }, [closeNavigation, navigate]);
   useEffect(() => () => {
     if (navigationFocusFrameRef.current !== null) cancelAnimationFrame(navigationFocusFrameRef.current);
+  }, []);
+  useEffect(() => {
+    const desktopMode = window.matchMedia("(min-width: 901px) and (min-height: 721px)");
+    const onModeChange = (event: MediaQueryListEvent) => {
+      if (!event.matches) return;
+      if (navigationFocusFrameRef.current !== null) cancelAnimationFrame(navigationFocusFrameRef.current);
+      setNavigationOpen(false);
+      document.body.style.overflow = "";
+      navigationFocusFrameRef.current = requestAnimationFrame(() => {
+        const heading = workspaceRef.current?.querySelector<HTMLElement>("h1");
+        if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
+        navigationFocusFrameRef.current = null;
+      });
+    };
+    desktopMode.addEventListener("change", onModeChange);
+    return () => desktopMode.removeEventListener("change", onModeChange);
   }, []);
   useEffect(() => {
     if (!navigationOpen) return;
