@@ -365,6 +365,11 @@ await executeBrowserLifecycle({
       assert.equal(await evaluate("document.querySelectorAll('.navigation-trigger,.navigation-close,.navigation-overlay').length"),0);
     }
     if(width===1440){
+      assert.ok(await evaluate("[...document.querySelectorAll('.risk-page label')].find(node=>node.innerText.startsWith('Jenis risiko')).innerText.includes('Gangguan produksi')"));
+      await evaluate(selectChange('.risk-page','Jenis risiko','Gangguan produksi'));await waitUntil("document.querySelectorAll('.risk-page tbody tr').length===1&&document.querySelector('.risk-page tbody tr').cells[1].textContent==='Gangguan produksi'","filter Gangguan produksi");
+      await evaluate(selectChange('.risk-page','Jenis risiko','all'));await waitUntil("document.querySelectorAll('.risk-page tbody tr').length>1","reset Gangguan produksi");
+      assert.equal(await evaluate("[...document.querySelectorAll('.risk-page .monitoring-kpis article')].find(node=>node.querySelector('span')?.innerText==='Luas terdampak early warning')?.querySelector('strong').innerText"),"2.345 ha");
+      assert.ok(await evaluate("document.querySelector('.risk-page .monitoring-definition').innerText.includes('bukan seluruh luas tanam')"));
       for(const method of['header','escape','overlay']){await evaluate("(()=>{const button=document.querySelector('.risk-page tbody button');button.dataset.qaTrigger='risk';button.focus();button.click()})()");await waitFor(".monitoring-modal");await waitUntil("document.querySelector('.monitoring-modal').contains(document.activeElement)","fokus modal Risiko "+method);if(method==='header')await evaluate("document.querySelector('.monitoring-modal header button').click()");else if(method==='escape')await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");else await evaluate("document.querySelector('.monitoring-modal-overlay').dispatchEvent(new MouseEvent('mousedown',{bubbles:true}))");await waitUntil("!document.querySelector('.monitoring-modal')","tutup modal Risiko "+method);await waitUntil("document.activeElement?.dataset.qaTrigger==='risk'","restore fokus Risiko "+method)}
       await verifyPaginationReset({pageSelector:'.risk-page',change:inputChange('.risk-page','Semangga'),verify:"[...document.querySelectorAll('.risk-page tbody tr')].every(row=>row.cells[0].textContent.includes('Semangga'))",reset:inputChange('.risk-page',''),label:'Risiko pencarian'});
       await verifyPaginationReset({pageSelector:'.risk-page',change:selectChange('.risk-page','Jenis risiko','Kekeringan'),verify:"[...document.querySelectorAll('.risk-page tbody tr')].every(row=>row.cells[1].textContent==='Kekeringan')",reset:selectChange('.risk-page','Jenis risiko','all'),label:'Risiko jenis'});
@@ -436,6 +441,11 @@ await executeBrowserLifecycle({
   await evaluate("document.querySelector('.map-region-options [role=option]').click()"); await sleep(25);
   assert.equal(await evaluate("document.querySelector('#map-region-query').value"), "Semangga \u2014 Distrik");
   assert.match(await evaluate("location.href"), /district=93\.01\.05/);
+  await send("Page.navigate",{url:`${origin}/?season=MT2-2026#view=peta-lahan`});await waitFor(".land-insight");
+  const mapRiskDefinition=await evaluate("document.querySelector('.land-insight').innerText");
+  assert.ok(mapRiskDefinition.includes('TARGET LUAS TANAM MT II')&&mapRiskDefinition.includes('42.680 ha')&&mapRiskDefinition.includes('Realisasi 38.180 ha · capaian 89,5%'));
+  assert.ok(mapRiskDefinition.includes('KLASIFIKASI RISIKO LAHAN')&&mapRiskDefinition.includes('Cakupan saat ini 38.180 ha'));
+  assert.equal(mapRiskDefinition.includes('LAHAN AKTIF MT II'),false);
   assert.equal(await evaluate("/[\u00c3\ufffd]|\u00e2(?:\u20ac|\u0152)/u.test(document.body.innerText)"), false);
   await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Produksi\"]')?.click()"); await waitFor(".monitoring-chart-production");
   await evaluate(`(()=>{const select=document.querySelector('select[aria-label="Musim tanam"]');select.value='MT2-2026';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(30);

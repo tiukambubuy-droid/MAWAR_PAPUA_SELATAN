@@ -187,6 +187,16 @@ test("Semangga MT II risk is canonical and composition selectors are season-leve
   assert.equal(risk.total, 5822);
 });
 
+test("county mapped-land risk classification uses planting realization as its distinct denominator", () => {
+  const mt1 = mapModule.selectRiskMonitoring("MT1-2026", "93.01");
+  const mt2 = mapModule.selectRiskMonitoring("MT2-2026", "93.01");
+  assert.equal(mapModule.mappedLandRiskDefinition.id, "mapped_planting_risk_classification");
+  assert.equal(mapModule.mappedLandRiskDefinition.denominatorField, "planting_realization_ha");
+  assert.equal(mt1.total, 35120);
+  assert.equal(mt2.total, 38180);
+  assert.deepEqual(Object.fromEntries(mt2.items.map(item => [item.label, item.area])), {Rendah:9393,Waspada:9174,Sedang:9170,"Tinggi/Kritis":10443});
+});
+
 test("breadcrumb reducer executes parent resets", () => {
   const current = { districtId: "93.01.14", villageId: "93.01.14.2001" };
   assert.deepEqual(mapModule.reduceMapBreadcrumb("regency", current), { districtId: null, villageId: null });

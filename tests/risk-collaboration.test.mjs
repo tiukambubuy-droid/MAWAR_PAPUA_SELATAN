@@ -74,6 +74,30 @@ test("collaboration and county risk aggregates remain canonical", () => {
   const rows=datasets.climateRisk.records.filter(x=>x.season_id==="MT2-2026").map(riskData.enrichRisk), risk=riskData.aggregateClimateRiskMetrics(rows); assert.deepEqual([risk.monitoredRecordCount,risk.approvedRecordCount,risk.affectedAreaHa,risk.dominantRisk],[6,5,2345,"Kekeringan"]); assert.equal(risk.validationPercent,5/6*100); assert.match(risk.dominantRiskMethod,/risk_score/);
 });
 
+test("early-warning taxonomy and affected-area definition come from production records", () => {
+  const sourceTypes = [...new Set(datasets.climateRisk.records.map(row => row.risk_type))];
+  assert.deepEqual(riskData.climateRiskTypeOptions, sourceTypes);
+  assert.ok(riskData.climateRiskTypeOptions.includes("Gangguan produksi"));
+  assert.equal(riskData.climateRiskIndicatorDefinition.id, "early_warning_affected_area");
+  assert.notEqual(riskData.climateRiskIndicatorDefinition.id, "mapped_planting_risk_classification");
+  for (const seasonId of ["MT1-2026", "MT2-2026"]) {
+    const selected = riskData.selectClimateRisks(seasonId);
+    assert.equal(selected.items.filter(row => row.risk_type === "Gangguan produksi").length, 1);
+  }
+  assert.equal(riskData.selectClimateRisks("MT2-2026").aggregate.affectedAreaHa, 2345);
+});
+
+test("map and early-warning labels cannot collapse target, realization, and affected area", async () => {
+  const [page, riskPage] = await Promise.all([readFile("app/page.tsx", "utf8"), readFile("components/risk/RiskClimatePage.tsx", "utf8")]);
+  assert.doesNotMatch(page, /LAHAN AKTIF MT II/);
+  assert.match(page, /TARGET LUAS TANAM/);
+  assert.match(page, /aggregate\.planting_realization_ha/);
+  assert.match(page, /mappedLandRiskDefinition\.description/);
+  assert.match(riskPage, /climateRiskIndicatorDefinition\.label/);
+  assert.match(riskPage, /climateRiskTypeOptions/);
+  assert.doesNotMatch(riskPage, /\["Kekeringan","Banjir\/genangan","Hama dan penyakit"/);
+});
+
 test("sorting matrix is stable, immutable and null-last both directions", () => {
   const rows=datasets.climateRisk.records.slice(0,4).map((x,i)=>({...x,risk_type:i===2?null:x.risk_type,affected_area_ha:i===1?null:i===3?Number.NaN:x.affected_area_ha,valid_until:i===1?"invalid":x.valid_until})), before=structuredClone(rows);
   for(const direction of["asc","desc"]){const text=table.stableSort(rows,x=>x.risk_type,direction),number=table.stableSort(rows,x=>x.affected_area_ha,direction),date=table.stableSort(rows,x=>table.dateSortValue(x.valid_until),direction);assert.equal(text.at(-1).risk_type,null);assert.ok(number.at(-1).affected_area_ha===null||!Number.isFinite(number.at(-1).affected_area_ha));assert.equal(table.dateSortValue(date.at(-1).valid_until),null);}

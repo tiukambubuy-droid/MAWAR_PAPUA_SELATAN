@@ -23,7 +23,7 @@ import {
   regions,
 } from "@/lib/data-foundation";
 import { createBigMapRequestController, createBigMapViewCallbacks, reduceBigMapViewState, type BigMapRequestController, type BigMapViewState } from "@/lib/big-map-request-controller";
-import { phaseColors, reduceMapBreadcrumb, riskColors, selectPhaseMonitoring, selectRiskMonitoring } from "@/lib/map-monitoring";
+import { mappedLandRiskDefinition, phaseColors, reduceMapBreadcrumb, riskColors, selectPhaseMonitoring, selectRiskMonitoring } from "@/lib/map-monitoring";
 import { defineLandMetric, formatPresentationValue, getValidationSummary, resolveTableRegionNames } from "@/lib/presentation-selectors";
 import { clampPan, clampZoom, fitToBounds, isMapDrag, prioritizedMapLabels, resetMapCamera } from "@/lib/visualization";
 import { createMapRegionOptions, districtIdForMapRegion, filterMapRegionOptions, formatMapRegionLabel, REGION_SEPARATOR } from "@/lib/map-region-search";
@@ -643,7 +643,9 @@ function LandPage() {
     return {
       scope: mapContext.selectedName ? `Distrik ${mapContext.selectedName}` : "Kabupaten Merauke",
       mapped: Math.round(aggregate.mapped_land_ha).toLocaleString("id-ID"),
-      active: Math.round(aggregate.active_land_ha).toLocaleString("id-ID"),
+      target: aggregate.planting_target_ha,
+      realized: aggregate.planting_realization_ha,
+      achievement: aggregate.planting_target_ha > 0 ? aggregate.planting_realization_ha / aggregate.planting_target_ha * 100 : null,
       verified: Math.round(aggregate.validation_rate),
       coverage: mapContext.selectedName
         ? `${risk.villages} kampung/kelurahan terpantau`
@@ -879,8 +881,8 @@ function LandPage() {
         <aside className="land-insight">
           {layer === "Luas Tanam" ? <>
           <article className="card mini-stat"><span>LUAS LAHAN TERPETAKAN</span><small className="insight-scope">{insightModel.scope}</small><strong>{insightModel.mapped} <small>ha</small></strong><em>↑ {insightModel.verified}% telah diverifikasi</em></article>
-          <article className="card mini-stat"><span>LAHAN AKTIF MT II</span><small className="insight-scope">{insightModel.scope}</small><strong>{insightModel.active} <small>ha</small></strong><em>{insightModel.coverage}</em></article>
-          <article className="card condition-card"><div className="card-title"><div>KOMPOSISI RISIKO</div><span>{insightModel.scope}</span></div><div>{insightModel.risk.monitored ? riskLevels.map(label => { const item = insightModel.risk.items.find(entry => entry.label === label); const area = item?.area ?? 0; const percentage = insightModel.risk.total ? area / insightModel.risk.total * 100 : 0; return <div className="composition-row" key={label}><span>{label} <b>{area.toLocaleString("id-ID")} ha · {percentage.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%</b></span><i><em style={{width:`${percentage}%`,background:riskColors[label]}} /></i></div>; }) : <span>{insightModel.risk.level}</span>}</div></article>
+          <article className="card mini-stat"><span>TARGET LUAS TANAM {filters.seasonId === "MT1-2026" ? "MT I" : "MT II"}</span><small className="insight-scope">{insightModel.scope}</small><strong>{insightModel.target.toLocaleString("id-ID")} <small>ha</small></strong><em>Realisasi {insightModel.realized.toLocaleString("id-ID")} ha · capaian {insightModel.achievement?.toLocaleString("id-ID", { maximumFractionDigits: 1 }) ?? "Belum tersedia"}%</em></article>
+          <article className="card condition-card"><div className="card-title"><div>{mappedLandRiskDefinition.label.toUpperCase()}</div><span>{insightModel.scope}</span></div><p className="card-copy">{mappedLandRiskDefinition.description} Cakupan saat ini {insightModel.risk.total.toLocaleString("id-ID")} ha.</p><div>{insightModel.risk.monitored ? riskLevels.map(label => { const item = insightModel.risk.items.find(entry => entry.label === label); const area = item?.area ?? 0; const percentage = insightModel.risk.total ? area / insightModel.risk.total * 100 : 0; return <div className="composition-row" key={label}><span>{label} <b>{area.toLocaleString("id-ID")} ha · {percentage.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%</b></span><i><em style={{width:`${percentage}%`,background:riskColors[label]}} /></i></div>; }) : <span>{insightModel.risk.level}</span>}</div></article>
           </> : layer === "Fase Tanam" ? <>
             <article className="card mini-stat"><span>FASE TANAM DOMINAN</span><small className="insight-scope">{analyticalInsight.scope}</small><strong className="textual-stat" style={{color:phaseColors[analyticalInsight.phase.phase]}}>{analyticalInsight.phase.phase}</strong><em>{analyticalInsight.phase.progress === null ? "Belum tersedia" : `Progres fase ${analyticalInsight.phase.progress.toLocaleString("id-ID")}%`}</em></article>
             <article className="card mini-stat"><span>LUAS SIAP PANEN</span><small className="insight-scope">{analyticalInsight.scope}</small><strong>{analyticalInsight.phase.ready.toLocaleString("id-ID")} <small>ha</small></strong><em>Estimasi {analyticalInsight.phase.harvest}</em></article>

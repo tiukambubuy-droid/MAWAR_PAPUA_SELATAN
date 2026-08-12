@@ -4,6 +4,14 @@ type RawClimateRiskRecord = (typeof raw.records)[number];
 export type ClimateRiskRecord = RawClimateRiskRecord & { risk_score: number; risk_level: string; alert_status: string; recommendations: string[] };
 export const climateRiskMetadata = raw.metadata;
 export const climateRiskRecords = raw.records;
+export const climateRiskTypeOptions = [...new Set(climateRiskRecords.map(record => record.risk_type))];
+export const climateRiskIndicatorDefinition = {
+  id: "early_warning_affected_area",
+  label: "Luas terdampak early warning",
+  description: "Jumlah luas terdampak pada record early warning terpantau dalam konteks aktif; bukan seluruh luas tanam.",
+  formula: "Jumlah affected_area_ha dari record early warning terpantau.",
+  unit: "ha",
+} as const;
 export function enrichRisk(r: RawClimateRiskRecord): ClimateRiskRecord { const score = r.likelihood * r.impact, level = riskLevel(r.likelihood, r.impact); return { ...r, risk_score: score, risk_level: level, alert_status: alertStatus(level, r.valid_until, raw.metadata.cutoff_date), recommendations: riskRecommendations(r) }; }
 export function aggregateClimateRiskMetrics(records: readonly ClimateRiskRecord[]) {
   const monitored = records.filter(r => r.monitoring_status !== "not_monitored");

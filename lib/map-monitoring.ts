@@ -18,6 +18,14 @@ export const riskColors: Record<string, string> = {
   "Tinggi/Kritis": "#b33d38",
 };
 
+export const mappedLandRiskDefinition = {
+  id: "mapped_planting_risk_classification",
+  label: "Klasifikasi risiko lahan",
+  description: "Klasifikasi kondisi risiko atas realisasi luas tanam yang terpetakan pada musim aktif.",
+  denominatorField: "planting_realization_ha",
+  unit: "ha",
+} as const;
+
 function descendantIds(regionId: string): Set<string> {
   const ids = new Set<string>();
   const visit = (id: string) => {
