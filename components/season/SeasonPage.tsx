@@ -80,7 +80,7 @@ export default function SeasonPage() {
     {unavailable ? <section className="card">Belum dipantau — belum tersedia data terverifikasi untuk wilayah ini.</section> : selectedSeason && month && <>
       <SeasonCalendar title={selectedSeason.name} months={months} active={safeMonth} onSelect={index => setSnapshot(`${seasonId}:${months[index].key}`)} />
       <section className="season-analytics-grid">
-        <SeasonSummaryCards title={selectedSeason.name} month={month} scale={scale} scope={scope} production={scopeKpis?.aggregate.gkg_production_ton ?? 0} rice={scopeKpis?.estimated_rice_ton ?? 0} />
+        <SeasonSummaryCards title={selectedSeason.name} month={month} scale={scale} scope={scope} production={scopeKpis?.aggregate.gkg_production_ton ?? 0} rice={scopeKpis?.estimated_rice_ton ?? 0} seasonId={selectedSeason.id} regionId={scopeKey} />
         <SeasonProgressChart months={months} active={safeMonth} title={selectedSeason.name} seasonId={seasonId} scale={scale} />
         <PhaseCompositionChart values={composition} total={Math.round(scopeTotal)} label={`DATA TERBARU ${selectedSeason.name} · ${scope}`} validation={month.validation} />
       </section>

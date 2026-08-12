@@ -164,6 +164,61 @@ await executeBrowserLifecycle({
     await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Musim Tanam\"]')?.click()"); await waitFor(".season-line-card .monitoring-chart-summary");
     assert.equal(await evaluate("document.querySelectorAll('.season-line-card .monitoring-chart-summary-item').length"), 3);
     assert.equal(await evaluate("document.querySelectorAll('.season-line-card .chart-value-label').length"), 0);
+    if(width===1440){
+      const monitoredDistricts=[["93.01.01","Merauke"],["93.01.05","Semangga"],["93.01.06","Tanah Miring"],["93.01.07","Jagebob"],["93.01.11","Kurik"],["93.01.14","Malind"]];
+      const unmonitoredDistricts=[["93.01.13","Animha"],["93.01.10","Elikobal"],["93.01.02","Muting"]];
+      const setSeasonContext=async(season,district="")=>{
+        await evaluate(`(()=>{const seasonNode=document.querySelector('select[aria-label="Musim Tanam"]'),districtNode=document.querySelector('select[aria-label="Distrik"]');seasonNode.value=${JSON.stringify(season)};seasonNode.dispatchEvent(new Event('change',{bubbles:true}));districtNode.value=${JSON.stringify(district)};districtNode.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+        const expectedDistrict=district?`location.search.includes('district=${district}')`:"!location.search.includes('district=')";
+        await waitUntil(`location.search.includes('season=${season}')&&${expectedDistrict}&&document.querySelector('select[aria-label="Musim Tanam"]')?.value==='${season}'&&document.querySelector('select[aria-label="Distrik"]')?.value==='${district}'`,`Musim Tanam ${season} ${district||"Kabupaten"} aktif`);
+      };
+      const activeFarmer=()=>evaluate(`(()=>{const card=[...document.querySelectorAll('.season-kpi-item')].find(node=>node.querySelector('span')?.textContent==='Petani Aktif');return{value:card?.querySelector('strong')?.textContent,note:card?.querySelector('small')?.textContent,notice:document.querySelector('.season-monitoring-note')?.textContent,bad:/97,2%|90,5%|undefined|NaN/.test(document.querySelector('.season-command')?.innerText??'')}})()`);
+      for(const [season,farmerValue,farmerNote] of [["MT1-2026","2.341","89,8% dari target"],["MT2-2026","2.545","83,5% dari target"]]){
+        await setSeasonContext(season);
+        assert.deepEqual(await activeFarmer(),{value:farmerValue,note:farmerNote,notice:"16 distrik lainnya belum dipantau pada data prototipe.",bad:false},`${season}: petani Kabupaten`);
+        const firstPage=await evaluate(`(()=>{const rows=[...document.querySelectorAll('.season-table-card tbody tr')],names=rows.map(row=>row.querySelector('.season-row-link')?.textContent);return{names,active:document.querySelector('.season-table-footer [aria-current=page]')?.textContent,previous:document.querySelector('.season-table-footer [aria-label="Halaman sebelumnya"]')?.disabled,next:document.querySelector('.season-table-footer [aria-label="Halaman berikutnya"]')?.disabled}})()`);
+        assert.equal(firstPage.names.length,5,`${season}: halaman pertama lima row`);assert.equal(firstPage.active,"1");assert.equal(firstPage.previous,true);assert.equal(firstPage.next,false);
+        await evaluate(`document.querySelector('.season-table-footer [aria-label="Halaman berikutnya"]').click()`);await waitUntil("document.querySelector('.season-table-footer [aria-current=page]')?.textContent==='2'",`${season}: halaman dua`);
+        const secondPage=await evaluate(`(()=>{const names=[...document.querySelectorAll('.season-table-card tbody tr')].map(row=>row.querySelector('.season-row-link')?.textContent);return{names,previous:document.querySelector('.season-table-footer [aria-label="Halaman sebelumnya"]')?.disabled,next:document.querySelector('.season-table-footer [aria-label="Halaman berikutnya"]')?.disabled}})()`);
+        assert.equal(secondPage.names.length,1,`${season}: halaman kedua satu row`);assert.equal(new Set([...firstPage.names,...secondPage.names]).size,6,`${season}: enam distrik unik`);assert.equal(secondPage.previous,false);assert.equal(secondPage.next,true);
+        await evaluate("document.querySelector('.season-table-card th:nth-child(1) button').click()");await waitUntil("document.querySelector('.season-table-footer [aria-current=page]')?.textContent==='1'&&document.querySelector('.season-table-card th:nth-child(1)').getAttribute('aria-sort')==='descending'",`${season}: sort nama descending dan reset halaman`);
+        const descending=await evaluate("[...document.querySelectorAll('.season-row-link')].map(node=>node.textContent)");
+        await evaluate("document.querySelector('.season-table-card th:nth-child(1) button').click()");await waitUntil("document.querySelector('.season-table-card th:nth-child(1)').getAttribute('aria-sort')==='ascending'",`${season}: sort nama ascending`);
+        const ascending=await evaluate("[...document.querySelectorAll('.season-row-link')].map(node=>node.textContent)");
+        assert.notDeepEqual(descending,ascending,`${season}: arah sort teks berubah`);
+        await evaluate("document.querySelector('.season-table-card th:nth-child(4) button').click()");await waitUntil("document.querySelector('.season-table-card th:nth-child(4)').getAttribute('aria-sort')==='ascending'",`${season}: sort capaian ascending`);
+        const numericAscending=await evaluate("[...document.querySelectorAll('.season-table-card tbody tr td:nth-child(4) b')].map(node=>parseFloat(node.textContent))");
+        await evaluate("document.querySelector('.season-table-card th:nth-child(4) button').click()");await waitUntil("document.querySelector('.season-table-card th:nth-child(4)').getAttribute('aria-sort')==='descending'",`${season}: sort capaian descending`);
+        const numericDescending=await evaluate("[...document.querySelectorAll('.season-table-card tbody tr td:nth-child(4) b')].map(node=>parseFloat(node.textContent))");
+        assert.ok(numericAscending.every((value,index)=>index===0||numericAscending[index-1]<=value),`${season}: numerik ascending`);assert.ok(numericDescending.every((value,index)=>index===0||numericDescending[index-1]>=value),`${season}: numerik descending`);
+        const triggerSelector=".season-table-card .season-eye";
+        const modalDistrict=await evaluate(`document.querySelector('${triggerSelector}').closest('tr').querySelector('.season-row-link').textContent`);
+        await evaluate(`document.querySelector('${triggerSelector}').focus();document.querySelector('${triggerSelector}').click()`);await waitFor(".detail-modal");
+        await waitUntil("document.querySelector('.detail-modal').contains(document.activeElement)&&document.body.style.overflow==='hidden'",`${season}: fokus dan scroll lock modal`);
+        const modalContext=await evaluate("(()=>{const modal=document.querySelector('.detail-modal');return{title:modal.querySelector('h2')?.textContent,meta:modal.querySelector('header small')?.textContent}})()");
+        assert.equal(modalContext.title,modalDistrict,`${season}: judul modal mengikuti distrik`);assert.ok(modalContext.meta.includes(season==="MT1-2026"?"31 Maret 2026":"24 Juli 2026"),`${season}: modal mengikuti musim aktif`);
+        await pressKey("Escape");await waitUntil("!document.querySelector('.detail-modal')&&document.activeElement?.classList.contains('season-eye')&&document.body.style.overflow===''",`${season}: Escape dan focus restoration`);
+        await evaluate(`document.querySelector('${triggerSelector}').click()`);await waitFor(".detail-modal");await evaluate("document.querySelector('.detail-modal header button').click()");await waitUntil("!document.querySelector('.detail-modal')",`${season}: tombol X modal`);
+        await evaluate(`document.querySelector('${triggerSelector}').click()`);await waitFor(".detail-modal");await evaluate("document.querySelector('.detail-modal-backdrop').dispatchEvent(new MouseEvent('mousedown',{bubbles:true}))");await waitUntil("!document.querySelector('.detail-modal')",`${season}: overlay modal`);
+      }
+      for(const season of ["MT1-2026","MT2-2026"])for(const [district,name] of monitoredDistricts){
+        await setSeasonContext(season,district);
+        const monitored=await evaluate(`(()=>{const body=document.querySelector('.season-command')?.innerText??'',phase=document.querySelector('.phase-insight strong')?.textContent;return{heading:body.includes('DISTRIK ${name.toUpperCase()}'),farmer:document.querySelector('.season-kpi-item-8 strong')?.textContent,groups:body.includes('Kelompok tani belum tersedia'),farmers:body.includes('Petani belum tersedia'),phase,bad:/1 petani|1 kelompok|undefined|NaN|89,8% dari target|83,5% dari target/.test(body)}})()`);
+        assert.ok(monitored.heading&&monitored.farmer==="Belum tersedia"&&monitored.groups&&monitored.farmers&&monitored.phase&&!monitored.bad,`${season} ${name}: ${JSON.stringify(monitored)}`);
+      }
+      for(const season of ["MT1-2026","MT2-2026"])for(const [district,name] of unmonitoredDistricts){
+        await setSeasonContext(season,district);
+        const unavailable=await evaluate("(()=>{const body=document.querySelector('.season-command')?.innerText??'';return{body,detailButtons:document.querySelectorAll('.season-eye').length,modal:Boolean(document.querySelector('.detail-modal')),synthetic:/Vegetatif|1 petani|1 kelompok|0 ha|0%/.test(body)}})()");
+        assert.ok(unavailable.body.includes("Belum dipantau")&&!unavailable.body.includes("Belum tersedia")&&!unavailable.synthetic&&unavailable.detailButtons===0&&!unavailable.modal,`${season} ${name}: not monitored bersih`);
+      }
+      await setSeasonContext("MT1-2026");
+      await setSeasonContext("MT2-2026","93.01.05");
+      await send("Page.reload");await waitFor(".season-command");await waitUntil(`location.hash==='#view=musim-tanam'&&location.search.includes('season=MT2-2026')&&location.search.includes('district=93.01.05')&&document.querySelector('select[aria-label="Distrik"]')?.value==='93.01.05'`, "refresh Semangga MT II");
+      await send("Page.navigate",{url:`${origin}/?season=MT1-2026&district=93.01.14#view=musim-tanam`});await waitFor(".season-command");await waitUntil(`document.querySelector('select[aria-label="Musim Tanam"]')?.value==='MT1-2026'&&document.querySelector('select[aria-label="Distrik"]')?.value==='93.01.14'`, "Malind MT I");
+      await evaluate("history.back()");await waitUntil("location.search.includes('season=MT2-2026')&&location.search.includes('district=93.01.05')", "Back Semangga MT II");await evaluate("history.forward()");await waitUntil("location.search.includes('season=MT1-2026')&&location.search.includes('district=93.01.14')", "Forward Malind MT I");
+      assert.equal(await evaluate("document.querySelector('.nav-item[aria-current=page]')?.textContent.trim()"),"Musim Tanam");
+      await setSeasonContext("MT2-2026");
+    }
     await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Produksi\"]')?.click()"); await waitFor(".monitoring-chart-production .monitoring-chart-summary");
     assert.equal(await evaluate("document.querySelectorAll('.monitoring-chart-production .monitoring-chart-summary-item').length"), 3);
     assert.equal(await evaluate("document.querySelectorAll('.monitoring-chart-production .chart-value-label').length"), 0);

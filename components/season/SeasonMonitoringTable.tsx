@@ -14,17 +14,34 @@ export function SeasonMonitoringTable({ title, rows, entityLabel, onSelect, onDe
 }) {
   const [query, setQuery] = useState("");
   const [phase, setPhase] = useState("Semua");
-  const [sort, setSort] = useState("name");
+  const [sort, setSort] = useState<"name" | "achievement">("name");
+  const [direction, setDirection] = useState<"ascending" | "descending">("ascending");
   const [page, setPage] = useState(1);
   const filtered = useMemo(() => {
     const next = rows.filter(row => row.name.toLowerCase().includes(query.toLowerCase()) && (phase === "Semua" || row.phase === phase));
-    return [...next].sort((a, b) => sort === "capaian" ? b.realized / b.target - a.realized / a.target : a.name.localeCompare(b.name, "id"));
-  }, [rows, query, phase, sort]);
+    return next.map((row, index) => ({ row, index })).sort((left, right) => {
+      const comparison = sort === "achievement"
+        ? left.row.realized / left.row.target - right.row.realized / right.row.target
+        : left.row.name.localeCompare(right.row.name, "id");
+      return (direction === "ascending" ? comparison : -comparison) || left.index - right.index;
+    }).map(item => item.row);
+  }, [rows, query, phase, sort, direction]);
   const pages = Math.max(1, Math.ceil(filtered.length / 5));
   const visible = filtered.slice((page - 1) * 5, page * 5);
+  const changeSort = (next: "name" | "achievement") => {
+    setPage(1);
+    if (sort === next) setDirection(current => current === "ascending" ? "descending" : "ascending");
+    else { setSort(next); setDirection("ascending"); }
+  };
   return <article className="card season-table-card"><div className="season-section-title">{title}</div>
-    <div className="season-table-tools"><input aria-label={`Cari ${entityLabel}`} value={query} onChange={e => { setQuery(e.target.value); setPage(1); }} placeholder={`Cari ${entityLabel.toLowerCase()}…`} /><select aria-label="Filter fase" value={phase} onChange={e => { setPhase(e.target.value); setPage(1); }}><option>Semua</option>{["Persemaian","Vegetatif","Generatif","Pematangan","Siap Panen"].map(item => <option key={item}>{item}</option>)}</select><select aria-label="Urutkan data" value={sort} onChange={e => setSort(e.target.value)}><option value="name">Urut nama</option><option value="capaian">Capaian tertinggi</option></select></div>
-    <div className="table-scroll"><table><thead><tr><th>{entityLabel}</th><th>Fase Dominan</th><th>Realisasi / Target</th><th>Capaian</th><th>Tren 4 Minggu</th><th>Estimasi Panen</th><th>Validasi</th><th>Aksi</th></tr></thead><tbody>{!visible.length && <tr><td colSpan={8}>Tidak ada data sesuai filter.<small>Ubah pencarian atau filter untuk melihat data lainnya.</small></td></tr>}{visible.map(row => { const pct = row.target > 0 ? Math.round(row.realized / row.target * 100) : 0; return <tr key={row.id} onDoubleClick={() => onSelect(row.name)}><td><button className="season-row-link" onClick={() => onSelect(row.name)}>{row.name}</button><small>{row.groups} kelompok · {row.farmers} petani</small></td><td><span className="season-phase" style={{ color: phasePalette[row.phase], background: `${phasePalette[row.phase]}18` }}>{row.phase}</span></td><td><strong>{row.realized.toLocaleString("id-ID")} ha</strong><i className="thin-progress"><em style={{ width: `${pct}%` }} /></i><small>dari {row.target.toLocaleString("id-ID")} ha</small></td><td><b className={pct < 82 ? "low" : ""}>{pct}%</b></td><td><Sparkline values={row.trend} /></td><td>{row.harvest}</td><td><b>{row.validation}%</b></td><td><button className="season-eye" onClick={() => onDetail(row)} aria-label={`Lihat detail ${row.name}`}>◎</button></td></tr>; })}</tbody></table></div>
-    <div className="season-table-footer"><span>Menampilkan {filtered.length ? (page - 1) * 5 + 1 : 0}–{Math.min(page * 5, filtered.length)} dari {filtered.length} data</span>{filtered.length > 0 && <div><button disabled={page === 1} aria-disabled={page === 1} aria-label="Halaman sebelumnya" onClick={() => setPage(p => p - 1)}>‹</button>{Array.from({ length: pages }, (_, i) => <button className={page === i + 1 ? "active" : ""} aria-label={`Buka halaman ${i + 1}`} aria-current={page === i + 1 ? "page" : undefined} onClick={() => setPage(i + 1)} key={i}>{i + 1}</button>)}<button disabled={page === pages} aria-disabled={page === pages} aria-label="Halaman berikutnya" onClick={() => setPage(p => p + 1)}>›</button></div>}</div>
+    <div className="season-table-tools"><input aria-label={`Cari ${entityLabel}`} value={query} onChange={event => { setQuery(event.target.value); setPage(1); }} placeholder={`Cari ${entityLabel.toLowerCase()}…`} /><select aria-label="Filter fase" value={phase} onChange={event => { setPhase(event.target.value); setPage(1); }}><option>Semua</option>{Object.keys(phasePalette).map(item => <option key={item}>{item}</option>)}</select></div>
+    <p className="season-monitoring-note">{entityLabel === "Distrik" ? "16 distrik lainnya belum dipantau pada data prototipe." : "Tabel hanya memuat wilayah yang mempunyai record pemantauan."}</p>
+    <div className="table-scroll"><table><thead><tr>
+      <th aria-sort={sort === "name" ? direction : "none"}><button type="button" onClick={() => changeSort("name")}>{entityLabel}</button></th>
+      <th>Fase Dominan</th><th>Realisasi / Target</th>
+      <th aria-sort={sort === "achievement" ? direction : "none"}><button type="button" onClick={() => changeSort("achievement")}>Capaian</button></th>
+      <th>Tren 4 Minggu</th><th>Estimasi Panen</th><th>Validasi</th><th>Aksi</th>
+    </tr></thead><tbody>{!visible.length && <tr><td colSpan={8}>Tidak ada data sesuai filter.<small>Ubah pencarian atau filter untuk melihat data lainnya.</small></td></tr>}{visible.map(row => { const pct = row.target > 0 ? Math.round(row.realized / row.target * 100) : 0; return <tr key={row.id} onDoubleClick={() => onSelect(row.name)}><td><button className="season-row-link" onClick={() => onSelect(row.name)}>{row.name}</button><small>{row.groups === null ? "Kelompok tani belum tersedia" : `${row.groups} kelompok`} · {row.farmers === null ? "Petani belum tersedia" : `${row.farmers} petani`}</small></td><td><span className="season-phase" style={{ color: phasePalette[row.phase], background: `${phasePalette[row.phase]}18` }}>{row.phase}</span></td><td><strong>{row.realized.toLocaleString("id-ID")} ha</strong><i className="thin-progress"><em style={{ width: `${pct}%` }} /></i><small>dari {row.target.toLocaleString("id-ID")} ha</small></td><td><b className={pct < 82 ? "low" : ""}>{pct}%</b></td><td><Sparkline values={row.trend} /></td><td>{row.harvest}</td><td><b>{row.validation}%</b></td><td><button className="season-eye" onClick={() => onDetail(row)} aria-label={`Lihat detail ${row.name}`}>◎</button></td></tr>; })}</tbody></table></div>
+    <div className="season-table-footer"><span>Menampilkan {filtered.length ? (page - 1) * 5 + 1 : 0}–{Math.min(page * 5, filtered.length)} dari {filtered.length} data</span>{filtered.length > 0 && <div><button disabled={page === 1} aria-disabled={page === 1} aria-label="Halaman sebelumnya" onClick={() => setPage(current => current - 1)}>‹</button>{Array.from({ length: pages }, (_, index) => <button className={page === index + 1 ? "active" : ""} aria-label={`Buka halaman ${index + 1}`} aria-current={page === index + 1 ? "page" : undefined} onClick={() => setPage(index + 1)} key={index}>{index + 1}</button>)}<button disabled={page === pages} aria-disabled={page === pages} aria-label="Halaman berikutnya" onClick={() => setPage(current => current + 1)}>›</button></div>}</div>
   </article>;
 }

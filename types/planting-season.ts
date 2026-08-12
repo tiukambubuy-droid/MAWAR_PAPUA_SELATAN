@@ -48,8 +48,9 @@ export type MonitoringRow = {
   realized: number;
   validation: number;
   harvest: string;
-  farmers: number;
-  groups: number;
+  farmers: number | null;
+  groups: number | null;
+  monitoringStatus: "active";
   plantedAt: string;
   updatedAt: string;
   trend: number[];

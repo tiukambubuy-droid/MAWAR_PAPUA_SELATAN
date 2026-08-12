@@ -138,9 +138,12 @@ button:focus-visible, select:focus-visible, input:focus-visible, [role="button"]
 .phase-composition-layout { padding:var(--space-card); gap:18px; }
 .phase-table-head,.phase-list>div,.phase-insight,.season-insights p { font-size:12px; line-height:1.45; }
 .season-table-tools { padding:12px var(--space-card); }
+.season-monitoring-note { margin:0; padding:9px var(--space-card); border-bottom:1px solid #e7ede9; color:#60766d; font-size:12px; line-height:1.45; }
 .season-table-tools input,.season-table-tools select { min-height:42px; font-size:13px; }
 .season-table-card table { width:100%; min-width:0; table-layout:fixed; }
 .season-table-card th,.season-table-card td { padding:12px 9px; font-size:13px; overflow-wrap:anywhere; }
+.season-table-card th>button { padding:0; border:0; background:transparent; color:inherit; font:inherit; font-weight:inherit; cursor:pointer; }
+.season-table-card th[aria-sort]>button:focus-visible { outline:3px solid #efc44e; outline-offset:3px; }
 .season-table-card small { font-size:12px; }
 
 /* Produksi */
