@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
-import { BarChart3, ChevronDown, CloudSun, FileText, LayoutDashboard, Map, Network, Search, ShieldCheck, Sprout, Wrench, X } from "lucide-react";
+import { BarChart3, ChevronDown, CloudSun, FileText, LayoutDashboard, Map, Menu, Network, Search, ShieldCheck, Sprout, Wrench, X } from "lucide-react";
 import SeasonCommandCenter from "@/components/season/SeasonPage";
 import ProductionCommandCenter from "@/components/production/ProductionPage";
 import ExecutiveDashboard from "@/components/overview/ExecutiveDashboard";
@@ -941,6 +941,11 @@ function ProductionPage() {
 
 function HomeContent() {
   const [activeNav, setActiveNav] = useState("Ringkasan");
+  const [navigationOpen, setNavigationOpen] = useState(false);
+  const navigationRef = useRef<HTMLElement>(null);
+  const navigationTriggerRef = useRef<HTMLButtonElement>(null);
+  const workspaceRef = useRef<HTMLElement>(null);
+  const navigationFocusFrameRef = useRef<number | null>(null);
   const viewFromLocation = useCallback(() => {
     const slug = window.location.hash.startsWith("#view=") ? window.location.hash.slice(6) : "";
     const fromUrl = Object.entries(viewSlugs).find(([,value]) => value === slug)?.[0];
@@ -961,6 +966,47 @@ function HomeContent() {
     return()=>window.removeEventListener("popstate",onPopState);
   },[viewFromLocation]);
   useEffect(()=>{sessionStorage.setItem("mawar-active-view-v1",activeNav);},[activeNav]);
+  const closeNavigation = useCallback((restoreFocus = true) => {
+    if (navigationFocusFrameRef.current !== null) cancelAnimationFrame(navigationFocusFrameRef.current);
+    setNavigationOpen(false);
+    if (restoreFocus) navigationFocusFrameRef.current = requestAnimationFrame(() => {
+      navigationTriggerRef.current?.focus();
+      navigationFocusFrameRef.current = null;
+    });
+  }, []);
+  const navigateFromDrawer = useCallback((label:string) => {
+    const usesDrawer = window.matchMedia("(max-width: 900px)").matches;
+    navigate(label);
+    if (!usesDrawer) return;
+    closeNavigation(false);
+    navigationFocusFrameRef.current = requestAnimationFrame(() => {
+      const heading = workspaceRef.current?.querySelector<HTMLElement>("h1");
+      if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
+      else navigationTriggerRef.current?.focus();
+      navigationFocusFrameRef.current = null;
+    });
+  }, [closeNavigation, navigate]);
+  useEffect(() => () => {
+    if (navigationFocusFrameRef.current !== null) cancelAnimationFrame(navigationFocusFrameRef.current);
+  }, []);
+  useEffect(() => {
+    if (!navigationOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const firstItem = navigationRef.current?.querySelector<HTMLButtonElement>(".nav-item:not(:disabled)");
+    requestAnimationFrame(() => firstItem?.focus());
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeNavigation();
+      if (event.key !== "Tab" || !navigationRef.current) return;
+      const focusable = [...navigationRef.current.querySelectorAll<HTMLButtonElement>("button:not(:disabled)")];
+      if (!focusable.length) return;
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => { document.body.style.overflow = previousOverflow; document.removeEventListener("keydown", onKeyDown); };
+  }, [closeNavigation, navigationOpen]);
   const { filters } = useDashboardFilters();
   const printDistrict = filters.districtId ? getRegionById(filters.districtId) : null;
   const printVillage = filters.villageId ? getRegionById(filters.villageId) : null;
@@ -986,20 +1032,23 @@ function HomeContent() {
         </div>
       </header>
       <main className="app-shell">
-      <aside className="sidebar">
+      <button className={`navigation-overlay${navigationOpen ? " is-open" : ""}`} aria-label="Tutup navigasi utama" tabIndex={navigationOpen ? 0 : -1} onClick={() => closeNavigation()} />
+      <aside ref={navigationRef} className={`sidebar${navigationOpen ? " is-open" : ""}`} aria-label="Panel navigasi utama">
+        <button type="button" className="navigation-close" aria-label="Tutup navigasi utama" onClick={() => closeNavigation()}><X aria-hidden="true" /></button>
         <button type="button" className="brand-mark" aria-label="Buka beranda MAWAR Papua Selatan" onClick={() => navigate("Ringkasan")}>
           <Image className="brand-logo" src="/branding/logo-papua-selatan.png" alt="" width={48} height={60} priority />
           <span className="brand-copy"><strong>MAWAR</strong><small>Papua Selatan</small></span>
         </button>
-        <nav aria-label="Navigasi utama">
+        <nav id="mawar-primary-navigation" aria-label="Navigasi utama">
           {nav.map(({ Icon, label, enabled }) => (
             <button
               key={label}
               className={activeNav === label ? "nav-item active" : "nav-item"}
-              onClick={() => enabled && navigate(label)}
+              onClick={() => { if (enabled) navigateFromDrawer(label); }}
               aria-label={label === "Infrastruktur & Sarana" ? "Buka halaman Infrastruktur dan Sarana" : label === "Risiko & Iklim" ? "Buka halaman Risiko dan Iklim" : `Buka halaman ${label}`}
               aria-current={activeNav === label ? "page" : undefined}
               aria-disabled={!enabled}
+              disabled={!enabled}
             >
               <span aria-hidden="true"><Icon size={21} /></span>
               <span>{label}</span>
@@ -1013,8 +1062,9 @@ function HomeContent() {
         </div>
       </aside>
 
-      <section className="workspace">
+      <section ref={workspaceRef} className="workspace" aria-label="Konten dashboard aktif">
         <header className="topbar">
+          <button ref={navigationTriggerRef} type="button" className="navigation-trigger" aria-label="Buka navigasi utama" aria-expanded={navigationOpen} aria-controls="mawar-primary-navigation" onClick={() => setNavigationOpen(true)}><Menu aria-hidden="true" /></button>
           <div className="identity">
             <Image className="identity-logo" src="/branding/logo-papua-selatan.png" alt="Lambang Pemerintah Provinsi Papua Selatan" width={36} height={45} priority />
             <div>

@@ -24,7 +24,7 @@ button, select { font: inherit; }
 button { cursor: pointer; }
 
 .app-shell { min-height: 100vh; display: flex; background: linear-gradient(135deg, #f7f8f3 0%, #eef4f0 100%); }
-.sidebar { position: fixed; inset: 0 auto 0 0; width: 164px; background: linear-gradient(180deg, #064936, #06392f 70%, #042b24); color: #fff; padding: 19px 12px; display: flex; flex-direction: column; z-index: 5; box-shadow: 10px 0 30px rgba(6,57,47,.12); }
+.sidebar { position: sticky; top: 0; align-self: flex-start; width: 164px; min-height: 100vh; background: linear-gradient(180deg, #064936, #06392f 70%, #042b24); color: #fff; padding: 19px 12px; display: flex; flex-direction: column; flex: 0 0 164px; z-index: 5; box-shadow: 10px 0 30px rgba(6,57,47,.12); }
 .brand-mark { width:100%; min-height:104px; padding:0; display:flex; justify-content:center; align-items:center; gap:9px; color:#fff; border:0; border-bottom:1px solid rgba(255,255,255,.13); background:transparent; margin-bottom:16px; border-radius:8px 8px 0 0; }
 .brand-mark:hover{background:rgba(255,255,255,.06)}
 .brand-logo,.identity-logo { object-fit:contain; flex:none; }
@@ -32,7 +32,7 @@ button { cursor: pointer; }
 .brand-copy { display:flex; flex-direction:column; min-width:0; }
 .brand-copy strong { font-size:14px; letter-spacing:.12em; }
 .brand-copy small { margin-top:3px; color:rgba(255,255,255,.68); font-size:8px; letter-spacing:.04em; }
-.sidebar nav { display: flex; flex-direction: column; gap: 5px; }
+.sidebar nav { display: flex; flex-direction: column; gap: 5px; overflow: visible; }
 .nav-item { border: 0; background: transparent; color: rgba(255,255,255,.72); min-height: 56px; border-radius: 10px; display: grid; grid-template-columns: 27px 1fr; align-items: center; gap: 7px; text-align: left; padding: 0 12px; font-size: 13px; transition: .2s ease; }
 .nav-item > span:first-child { font-size: 22px; }.nav-item:hover { color: white; background: rgba(255,255,255,.07); transform: translateX(2px); }
 .nav-item.active { color: #ffe06f; background: linear-gradient(90deg, rgba(16,126,91,.95), rgba(15,110,82,.68)); box-shadow: inset 3px 0 #efc44e, 0 6px 16px rgba(0,0,0,.12); }
@@ -40,7 +40,8 @@ button { cursor: pointer; }
 .side-status { margin-top: auto; border-top: 1px solid rgba(255,255,255,.13); padding: 16px 8px 0; font-size: 11px; color: #d8eee5; }
 .side-status small { display: block; color: rgba(255,255,255,.48); margin: 5px 0 0 14px; }.pulse,.live-dot { width: 8px; height: 8px; background: #3ed59a; border-radius: 99px; display: inline-block; margin-right: 6px; box-shadow: 0 0 0 4px rgba(62,213,154,.13); animation: pulse 2s infinite; }
 
-.workspace { min-width: 0; flex: 1; margin-left: 164px; }
+.workspace { min-width: 0; flex: 1; margin-left: 0; }
+.navigation-trigger,.navigation-close,.navigation-overlay { display:none; }
 .topbar { height: 72px; background: rgba(255,255,255,.95); border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; padding: 0 26px; position: sticky; top: 0; z-index: 4; backdrop-filter: blur(12px); }
 .identity { display: flex; gap: 12px; align-items: center; }.identity-logo { width:34px; height:43px; }
 .identity div:last-child { display: flex; flex-direction: column; }.identity strong { font-size: 15px; color: var(--forest); letter-spacing: .08em; }.identity span { font-size: 11px; color: var(--muted); margin-top: 3px; }

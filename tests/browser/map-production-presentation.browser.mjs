@@ -53,6 +53,12 @@ await executeBrowserLifecycle({
     if (message.result.exceptionDetails) throw new Error(message.result.exceptionDetails.exception?.description ?? message.result.exceptionDetails.text);
     return message.result.result.value;
   };
+  const pressKey = async (key, modifiers = 0) => {
+    const keyCode=key==="Enter"?13:key==="Tab"?9:key==="Escape"?27:0;
+    const code=key==="Enter"?"Enter":key;
+    await send("Input.dispatchKeyEvent", { type:"keyDown", key, code, text:key==="Enter"?"\r":undefined, unmodifiedText:key==="Enter"?"\r":undefined, modifiers, windowsVirtualKeyCode:keyCode, nativeVirtualKeyCode:keyCode });
+    await send("Input.dispatchKeyEvent", { type:"keyUp", key, code, modifiers, windowsVirtualKeyCode:keyCode, nativeVirtualKeyCode:keyCode });
+  };
   const waitFor = async selector => {
     for (let attempt = 0; attempt < 80; attempt++) { if (await evaluate(`Boolean(document.querySelector(${JSON.stringify(selector)}))`)) return; await sleep(75); }
     throw new Error(`Selector tidak ditemukan: ${selector}`);
@@ -78,11 +84,44 @@ await executeBrowserLifecycle({
 
   const viewports = [[1920, 1080], [1440, 900], [1366, 768], [1024, 768], [768, 1024], [430, 932], [390, 844]];
   const foodLayoutMetrics = [];
+  const navigationLayoutMetrics = [];
   for (const [width, height] of viewports) {
     await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width <= 430 });
     await send("Page.navigate", { url: "about:blank" });
     await send("Storage.clearDataForOrigin", { origin, storageTypes: "local_storage,session_storage" });
     await send("Page.navigate", { url: `${origin}/?season=MT2-2026` }); await waitFor(".executive-big-layer [data-region-id='93.01.05']");
+    const navigationMetrics=await evaluate(`(()=>{const sidebar=document.querySelector('.sidebar'),nav=sidebar.querySelector('nav'),brand=sidebar.querySelector('.brand-mark'),workspace=document.querySelector('.workspace'),trigger=document.querySelector('.navigation-trigger'),items=[...nav.querySelectorAll('.nav-item')],status=sidebar.querySelector('.side-status'),demo=status?.querySelector('small'),sr=sidebar.getBoundingClientRect(),nr=nav.getBoundingClientRect(),br=brand.getBoundingClientRect(),wr=workspace.getBoundingClientRect(),tr=status?.getBoundingClientRect(),dr=demo?.getBoundingClientRect(),style=getComputedStyle(sidebar),navStyle=getComputedStyle(nav),inside=(r,p)=>r.left>=p.left-1&&r.right<=p.right+1;return{drawer:getComputedStyle(trigger).display!=='none',sidebarOverflowY:style.overflowY,navOverflowY:navStyle.overflowY,sidebarScrollHeight:sidebar.scrollHeight,sidebarClientHeight:sidebar.clientHeight,navScrollHeight:nav.scrollHeight,navClientHeight:nav.clientHeight,documentScrollHeight:document.documentElement.scrollHeight,menuCount:items.length,active:nav.querySelectorAll('[aria-current=page]').length,clipped:items.some(item=>item.scrollWidth>item.clientWidth+1||item.scrollHeight>item.clientHeight+1),contained:inside(br,sr)&&inside(nr,sr)&&items.every(item=>inside(item.getBoundingClientRect(),sr))&&(!tr||inside(tr,sr))&&(!dr||inside(dr,sr)),iconDistorted:items.some(item=>{const svg=item.querySelector('svg')?.getBoundingClientRect();return svg&&Math.abs(svg.width-svg.height)>1}),statusOverlap:Boolean(status&&items.some(item=>{const a=item.getBoundingClientRect(),b=status.getBoundingClientRect();return a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top})),offsetOk:${width<=900}?Math.abs(wr.left)<1:wr.left>=sr.right-1,pageOverflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+1}})()`);
+    assert.equal(navigationMetrics.sidebarOverflowY,"visible",`${width}x${height}: sidebar bukan vertical scroll container`);
+    assert.equal(navigationMetrics.navOverflowY,"visible",`${width}x${height}: nav bukan vertical scroll container`);
+    assert.equal(navigationMetrics.menuCount,9);assert.equal(navigationMetrics.active,1);
+    assert.ok(!navigationMetrics.clipped&&navigationMetrics.contained&&!navigationMetrics.iconDistorted&&!navigationMetrics.statusOverlap&&navigationMetrics.offsetOk&&!navigationMetrics.pageOverflow,`${width}x${height}: ${JSON.stringify(navigationMetrics)}`);
+    assert.equal(navigationMetrics.drawer,width<=900,`${width}x${height}: mode drawer tidak sesuai breakpoint`);
+    navigationLayoutMetrics.push({width,height,sidebarScrollHeight:navigationMetrics.sidebarScrollHeight,sidebarClientHeight:navigationMetrics.sidebarClientHeight,navScrollHeight:navigationMetrics.navScrollHeight,navClientHeight:navigationMetrics.navClientHeight,documentScrollHeight:navigationMetrics.documentScrollHeight,overflowY:navigationMetrics.sidebarOverflowY});
+    if(width===1440)await capture("sidebar-012a-final-1440x900");
+    if(navigationMetrics.drawer){
+      await evaluate("document.querySelector('.navigation-trigger').click()");await waitUntil("document.querySelector('.sidebar').classList.contains('is-open')","drawer terbuka");
+      await waitUntil("document.activeElement?.classList.contains('nav-item')","fokus masuk ke drawer");
+      assert.equal(await evaluate("document.body.style.overflow"),"hidden");
+      if(width===768||width===430||width===390){
+        await evaluate("(()=>{const enabled=[...document.querySelectorAll('.sidebar button:not(:disabled)')];enabled.at(-1).focus()})()");await pressKey("Tab");
+        assert.equal(await evaluate("document.activeElement===document.querySelector('.navigation-close')"),true,`${width}x${height}: Tab wrap ke elemen pertama`);
+        await evaluate("document.querySelector('.navigation-close').focus()");await pressKey("Tab",8);
+        assert.equal(await evaluate("document.activeElement===[...document.querySelectorAll('.sidebar button:not(:disabled)')].at(-1)"),true,`${width}x${height}: Shift+Tab wrap ke elemen terakhir`);
+      }
+      if(width===390)await capture("sidebar-012a-drawer-390x844");
+      await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");await waitUntil("!document.querySelector('.sidebar').classList.contains('is-open')","drawer tertutup dengan Escape");
+      await waitUntil("document.activeElement===document.querySelector('.navigation-trigger')","fokus kembali ke trigger");
+      assert.equal(await evaluate("document.body.style.overflow"),"");
+      await evaluate("document.querySelector('.navigation-trigger').click()");await waitUntil("document.querySelector('.sidebar').classList.contains('is-open')","drawer terbuka kembali");
+      await evaluate("document.querySelector('.navigation-overlay').click()");await waitUntil("!document.querySelector('.sidebar').classList.contains('is-open')","overlay menutup drawer");
+      if(width===768||width===430||width===390){
+        await evaluate("document.querySelector('.navigation-trigger').click()");await waitUntil("document.querySelector('.sidebar').classList.contains('is-open')","drawer untuk tombol X");
+        assert.equal(await evaluate("document.querySelector('.navigation-close').getAttribute('aria-label')"),"Tutup navigasi utama");
+        await evaluate("document.querySelector('.navigation-close').focus()");await pressKey("Enter");await waitUntil("!document.querySelector('.sidebar').classList.contains('is-open')","tombol X menutup drawer");
+        await waitUntil("document.activeElement===document.querySelector('.navigation-trigger')","tombol X memulihkan fokus");
+        assert.equal(await evaluate("document.body.style.overflow"),"");
+      }
+    }
     assert.equal(await evaluate("document.querySelectorAll('.executive-big-layer text').length"), 0);
     const summaryMetrics = await evaluate(`(()=>{const chart=document.querySelector('.executive-chart .monitoring-chart'),strip=chart.querySelector('.monitoring-chart-summary'),svg=chart.querySelector('svg'),axis=svg.querySelector('.chart-axis-row text'),cutoff=svg.querySelector('.chart-cutoff text'),sr=strip.getBoundingClientRect(),vr=svg.getBoundingClientRect();return{items:strip.querySelectorAll('.monitoring-chart-summary-item').length,labels:svg.querySelectorAll('.chart-value-label').length,labelFont:parseFloat(getComputedStyle(strip.querySelector('dt')).fontSize),valueFont:parseFloat(getComputedStyle(strip.querySelector('dd')).fontSize),axisHeight:axis.getBoundingClientRect().height,cutoffHeight:cutoff.getBoundingClientRect().height,inside:sr.left>=chart.getBoundingClientRect().left&&sr.right<=chart.getBoundingClientRect().right+1,ordered:sr.bottom<=vr.top+1,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+1}})()`);
     assert.equal(summaryMetrics.items, 3);
@@ -254,12 +293,17 @@ await executeBrowserLifecycle({
     if(width===1440||width===390){await evaluate("scrollTo(0,0)");await capture(`risiko-${width}x${height}`)}
     await evaluate(`(()=>{const select=[...document.querySelectorAll('.risk-page select')].find(node=>node.closest('label')?.innerText.startsWith('Distrik'));select.value='';select.dispatchEvent(new Event('change',{bubbles:true}))})()`);await sleep(40);
     assert.ok(await evaluate("document.querySelectorAll('.risk-page tbody tr').length>0"));
-    if([1440,768,390].includes(width)){
-      await evaluate("document.querySelector('.risk-page tbody button').click()"); await waitFor(".monitoring-modal"); await waitUntil("document.querySelector('.monitoring-modal').contains(document.activeElement)","fokus modal Risiko");
+    if([1440,768,430,390].includes(width)){
+      await evaluate("(()=>{const button=document.querySelector('.risk-page tbody button');button.dataset.qaModalTrigger='risk';button.focus();button.click()})()"); await waitFor(".monitoring-modal"); await waitUntil("document.querySelector('.monitoring-modal').contains(document.activeElement)","fokus modal Risiko");
       const riskModal=await evaluate(`(()=>{const dialog=document.querySelector('.monitoring-modal'),body=dialog.querySelector('.monitoring-modal-body'),r=dialog.getBoundingClientRect(),style=getComputedStyle(body),text=body.innerText;return{inside:r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight,font:parseFloat(style.fontSize),line:parseFloat(style.lineHeight)/parseFloat(style.fontSize),scroll:body.scrollHeight>=body.clientHeight,metadata:['Status monitoring','Status validasi','Tipe sumber','Tipe data','Diperbarui','Referensi','Formula skor','Cut-off','Rekomendasi berbasis aturan'].every(x=>text.includes(x)),locked:getComputedStyle(document.body).overflow==='hidden'}})()`);
       assert.ok(riskModal.inside&&riskModal.font>=12&&riskModal.line>=1.4&&riskModal.metadata&&riskModal.locked);
+      if([1440,430,390].includes(width)){
+        const stacking=await evaluate(`(()=>{const overlay=document.querySelector('.monitoring-modal-overlay'),dialog=document.querySelector('.monitoring-modal'),drawer=document.querySelector('.sidebar'),trigger=document.querySelector('.navigation-trigger'),or=overlay.getBoundingClientRect(),tr=trigger.getBoundingClientRect(),vw=document.documentElement.clientWidth,vh=document.documentElement.clientHeight,point=document.elementFromPoint(Math.max(0,Math.min(vw-1,tr.left+tr.width/2)),Math.max(0,Math.min(vh-1,tr.top+tr.height/2)));return{overlayZ:Number(getComputedStyle(overlay).zIndex),drawerZ:Number(getComputedStyle(drawer).zIndex),dialogVisible:dialog.getBoundingClientRect().width>0&&dialog.getBoundingClientRect().height>0,modalFocused:dialog.contains(document.activeElement),drawerClosed:!drawer.classList.contains('is-open'),triggerCovered:point===overlay||overlay.contains(point),overlayInside:or.left<=0&&or.top<=0&&or.right>=vw&&or.bottom>=vh}})()`);
+        assert.ok(stacking.dialogVisible&&stacking.modalFocused&&stacking.drawerClosed&&stacking.triggerCovered&&stacking.overlayInside,`${width}x${height}: modal stacking ${JSON.stringify(stacking)}`);
+      }
       if(width===1440)await capture("modal-risiko-1440x900");
-      await evaluate("document.querySelector('.monitoring-modal footer button').click()"); await waitUntil("!document.querySelector('.monitoring-modal')","modal Risiko tertutup");
+      await evaluate("document.querySelector('.monitoring-modal footer button').click()"); await waitUntil("!document.querySelector('.monitoring-modal')","modal Risiko tertutup");await waitUntil("document.activeElement?.dataset.qaModalTrigger==='risk'","fokus modal kembali");assert.equal(await evaluate("document.body.style.overflow"),"");
+      if(width<=430){await evaluate("document.querySelector('.navigation-trigger').click()");await waitUntil("document.querySelector('.sidebar').classList.contains('is-open')","drawer setelah modal");await pressKey("Escape");await waitUntil("!document.querySelector('.sidebar').classList.contains('is-open')","drawer setelah modal tertutup");assert.equal(await evaluate("document.body.style.overflow"),"")}
     }
     if(width===1440){
       for(const method of['header','escape','overlay']){await evaluate("(()=>{const button=document.querySelector('.risk-page tbody button');button.dataset.qaTrigger='risk';button.focus();button.click()})()");await waitFor(".monitoring-modal");await waitUntil("document.querySelector('.monitoring-modal').contains(document.activeElement)","fokus modal Risiko "+method);if(method==='header')await evaluate("document.querySelector('.monitoring-modal header button').click()");else if(method==='escape')await evaluate("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");else await evaluate("document.querySelector('.monitoring-modal-overlay').dispatchEvent(new MouseEvent('mousedown',{bubbles:true}))");await waitUntil("!document.querySelector('.monitoring-modal')","tutup modal Risiko "+method);await waitUntil("document.activeElement?.dataset.qaTrigger==='risk'","restore fokus Risiko "+method)}
@@ -375,7 +419,51 @@ await executeBrowserLifecycle({
   assert.equal(await evaluate("document.querySelectorAll('.infrastructure-page .monitoring-kpis').length"),0);
   assert.equal(await evaluate("/0\s*(%|ton|km)/.test(document.querySelector('.infrastructure-page .compact-empty-state')?.innerText??'')"),false);
   assert.deepEqual(runtimeErrors, []);
+  const lowHeightCases=[[900,600],[840,560],[720,500]];
+  const expectedMenuOrder=["Ringkasan","Peta Lahan","Musim Tanam","Produksi","Ketahanan Pangan","Infrastruktur & Sarana","Risiko & Iklim","Kolaborasi OPD","Laporan"];
+  for(const [width,height] of lowHeightCases){
+    await send("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:1,mobile:false});
+    await send("Page.navigate",{url:`${origin}/?season=MT2-2026`});await waitFor(".navigation-trigger");
+    await evaluate("document.querySelector('.navigation-trigger').click()");await waitUntil("document.querySelector('.sidebar').classList.contains('is-open')","drawer tinggi rendah terbuka");
+    await waitUntil("document.activeElement?.classList.contains('nav-item')","fokus awal drawer tinggi rendah");
+    const low=await evaluate(`(()=>{const sidebar=document.querySelector('.sidebar'),nav=sidebar.querySelector('nav'),brand=sidebar.querySelector('.brand-mark'),status=sidebar.querySelector('.side-status'),demo=status.querySelector('small'),items=[...nav.querySelectorAll('.nav-item')],sr=sidebar.getBoundingClientRect(),inside=r=>r.left>=sr.left-1&&r.right<=sr.right+1&&r.top>=sr.top-1&&r.bottom<=sr.bottom+1;return{columns:getComputedStyle(nav).gridTemplateColumns.split(' ').filter(Boolean).length,labels:items.map(x=>x.textContent.trim()),sizes:items.map(x=>{const r=x.getBoundingClientRect(),svg=x.querySelector('svg').getBoundingClientRect();return{w:r.width,h:r.height,font:parseFloat(getComputedStyle(x).fontSize),iconW:svg.width,iconH:svg.height,inside:inside(r),clipped:x.scrollWidth>x.clientWidth+1||x.scrollHeight>x.clientHeight+1}}),brandInside:inside(brand.getBoundingClientRect()),statusInside:inside(status.getBoundingClientRect()),demoInside:inside(demo.getBoundingClientRect()),sidebarInside:sr.top>=-1&&sr.bottom<=innerHeight+1,overflowY:getComputedStyle(sidebar).overflowY,navOverflowY:getComputedStyle(nav).overflowY,pageOverflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+1}})()`);
+    assert.equal(low.columns,2,`${width}x${height}: dua kolom`);assert.deepEqual(low.labels,expectedMenuOrder,`${width}x${height}: urutan DOM`);
+    assert.ok(low.sizes.every(x=>x.w>=40&&x.h>=40&&x.font>=12&&Number.isFinite(x.iconW)&&Math.abs(x.iconW-x.iconH)<=1&&x.inside&&!x.clipped),`${width}x${height}: target/font/bounds ${JSON.stringify(low.sizes)}`);
+    assert.ok(low.brandInside&&low.statusInside&&low.demoInside&&low.sidebarInside&&low.overflowY==="visible"&&low.navOverflowY==="visible"&&!low.pageOverflow,`${width}x${height}: drawer bounds ${JSON.stringify(low)}`);
+    await evaluate("[...document.querySelectorAll('.sidebar button:not(:disabled)')].at(-1).focus()");await pressKey("Tab");assert.equal(await evaluate("document.activeElement===document.querySelector('.navigation-close')"),true);
+    await evaluate("document.querySelector('.navigation-close').focus()");await pressKey("Tab",8);assert.equal(await evaluate("document.activeElement===[...document.querySelectorAll('.sidebar button:not(:disabled)')].at(-1)"),true);
+    await pressKey("Escape");await waitUntil("!document.querySelector('.sidebar').classList.contains('is-open')","drawer tinggi rendah tertutup");
+  }
+  const zoomFactors=[1,1.1,1.25,1.5,1.75,2],zoomMetrics=[];
+  for(const [baseWidth,baseHeight] of viewports)for(const factor of zoomFactors){
+    const width=Math.floor(baseWidth/factor),height=Math.floor(baseHeight/factor),context=`base ${baseWidth}x${baseHeight}, zoom ${factor}, effective ${width}x${height}`;
+    await send("Emulation.setDeviceMetricsOverride",{width,height,deviceScaleFactor:1,mobile:false});
+    await send("Page.navigate",{url:`${origin}/?season=MT2-2026`});await waitFor(".sidebar nav");
+    const drawerExpected=width<=900;if(drawerExpected){await evaluate("document.querySelector('.navigation-trigger').click()");await waitUntil("document.querySelector('.sidebar').classList.contains('is-open')",`${context}: drawer terbuka`);await waitUntil("document.activeElement?.classList.contains('nav-item')",`${context}: fokus drawer`)}
+    const zoomNavigation=await evaluate(`(()=>{const sidebar=document.querySelector('.sidebar'),nav=sidebar.querySelector('nav'),brand=sidebar.querySelector('.brand-mark'),status=sidebar.querySelector('.side-status'),trigger=document.querySelector('.navigation-trigger'),items=[...nav.querySelectorAll('.nav-item')],sr=sidebar.getBoundingClientRect(),br=brand.getBoundingClientRect(),tr=status.getBoundingClientRect(),inside=r=>r.left>=sr.left-1&&r.right<=sr.right+1&&r.top>=sr.top-1&&r.bottom<=sr.bottom+1,rects=items.map(item=>{const r=item.getBoundingClientRect(),icon=item.querySelector('svg').getBoundingClientRect();return{label:item.textContent.trim(),w:r.width,h:r.height,font:parseFloat(getComputedStyle(item).fontSize),iconW:icon.width,iconH:icon.height,inside:inside(r),clipped:item.scrollWidth>item.clientWidth+1||item.scrollHeight>item.clientHeight+1}}),overlap=(a,b)=>a.left<b.right-1&&a.right>b.left+1&&a.top<b.bottom-1&&a.bottom>b.top+1;return{drawer:getComputedStyle(trigger).display!=='none',sidebarOverflow:getComputedStyle(sidebar).overflowY,navOverflow:getComputedStyle(nav).overflowY,pageOverflow:document.documentElement.scrollWidth>document.documentElement.clientWidth+1,sidebarInside:sr.left>=-1&&sr.top>=-1&&sr.right<=innerWidth+1&&sr.bottom<=Math.max(innerHeight,document.documentElement.scrollHeight)+1,brandInside:inside(br),statusInside:inside(tr),brandMenuOverlap:items.some(x=>overlap(br,x.getBoundingClientRect())),statusMenuOverlap:items.some(x=>overlap(tr,x.getBoundingClientRect())),menuOverlap:items.some((x,i)=>items.some((y,j)=>j>i&&overlap(x.getBoundingClientRect(),y.getBoundingClientRect()))),count:items.length,active:nav.querySelectorAll('[aria-current=page]').length,rects,minFont:Math.min(...rects.map(x=>x.font)),minWidth:Math.min(...rects.map(x=>x.w)),minHeight:Math.min(...rects.map(x=>x.h))}})()`);
+    assert.equal(zoomNavigation.drawer,drawerExpected,`${context}: mode desktop/drawer`);assert.equal(zoomNavigation.count,9,`${context}: jumlah menu`);assert.equal(zoomNavigation.active,1,`${context}: active item`);
+    assert.equal(zoomNavigation.sidebarOverflow,"visible",`${context}: sidebar overflowY`);assert.equal(zoomNavigation.navOverflow,"visible",`${context}: nav overflowY`);
+    for(const item of zoomNavigation.rects){assert.ok(item.w>=40&&item.h>=40,`${context}: target ${item.label} ${item.w}x${item.h}`);assert.ok(item.font>=12,`${context}: font ${item.label} ${item.font}px`);assert.ok(Number.isFinite(item.iconW)&&Number.isFinite(item.iconH)&&item.iconW>0&&item.iconH>0&&Math.abs(item.iconW/item.iconH-1)<=.1,`${context}: ikon ${item.label} ${item.iconW}x${item.iconH}`);assert.ok(item.inside&&!item.clipped,`${context}: bounds/clipping ${item.label}`)}
+    assert.ok(!zoomNavigation.pageOverflow&&zoomNavigation.sidebarInside&&zoomNavigation.brandInside&&zoomNavigation.statusInside&&!zoomNavigation.brandMenuOverlap&&!zoomNavigation.statusMenuOverlap&&!zoomNavigation.menuOverlap,`${context}: overflow/overlap ${JSON.stringify(zoomNavigation)}`);
+    zoomMetrics.push({base:`${baseWidth}x${baseHeight}`,factor,effective:`${width}x${height}`,minFont:zoomNavigation.minFont,minTarget:`${zoomNavigation.minWidth}x${zoomNavigation.minHeight}`});
+    if(drawerExpected){await pressKey("Escape");await waitUntil("!document.querySelector('.sidebar').classList.contains('is-open')",`${context}: drawer tertutup`)}
+  }
+  await send("Emulation.setDeviceMetricsOverride",{width:768,height:1024,deviceScaleFactor:1,mobile:false});
+  await send("Page.navigate",{url:`${origin}/?season=MT2-2026`});await waitFor(".navigation-trigger");
+  for(const label of expectedMenuOrder.slice(0,-1)){
+    await evaluate("document.querySelector('.navigation-trigger').click()");await waitUntil("document.querySelector('.sidebar').classList.contains('is-open')","drawer regresi navigasi");
+    await evaluate(`[...document.querySelectorAll('.nav-item')].find(x=>x.textContent.trim()===${JSON.stringify(label)}).click()`);
+    await waitUntil(`document.querySelector('.nav-item[aria-current=page]')?.textContent.trim()===${JSON.stringify(label)}`,`active ${label}`);
+    await waitUntil("document.activeElement===document.querySelector('.workspace h1')",`fokus tujuan ${label}`);
+    assert.equal(await evaluate("document.querySelectorAll('.nav-item[aria-current=page]').length"),1);
+    const activeHash=await evaluate("location.hash");await send("Page.reload");await waitFor(".navigation-trigger");await waitUntil(`document.querySelector('.nav-item[aria-current=page]')?.textContent.trim()===${JSON.stringify(label)}`,`refresh ${label}`);assert.equal(await evaluate("location.hash"),activeHash);
+  }
+  await evaluate("document.querySelector('.navigation-trigger').click()");await waitUntil("document.querySelector('.sidebar').classList.contains('is-open')","drawer laporan disabled");
+  const beforeDisabled=await evaluate("location.hash");assert.equal(await evaluate("document.querySelector('.nav-item[aria-disabled=true]').disabled"),true);await evaluate("document.querySelector('.nav-item[aria-disabled=true]').click()");assert.equal(await evaluate("location.hash"),beforeDisabled);await pressKey("Escape");
+  await evaluate("history.back()");await waitUntil("document.querySelectorAll('.nav-item[aria-current=page]').length===1","Back active tunggal");const backActive=await evaluate("document.querySelector('.nav-item[aria-current=page]').textContent.trim()");await evaluate("history.forward()");await waitUntil(`document.querySelector('.nav-item[aria-current=page]')?.textContent.trim()!==${JSON.stringify(backActive)}`,"Forward active berubah");
   console.log(`Food layout metrics: ${JSON.stringify(foodLayoutMetrics)}`);
+  console.log(`Navigation layout metrics: ${JSON.stringify(navigationLayoutMetrics)}`);
+  console.log(`Zoom matrix PASS: ${zoomMetrics.length} combinations; minimum font ${Math.min(...zoomMetrics.map(x=>x.minFont))}px; minimum targets ${zoomMetrics.map(x=>x.minTarget).join(',')}`);
   console.log(`Browser DOM PASS: ${viewports.map(([w,h])=>`${w}x${h}`).join(", ")}`);
  }
 });
