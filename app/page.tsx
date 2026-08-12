@@ -1041,7 +1041,7 @@ function HomeContent() {
           <div className="trust">
             <div><span>TERAKHIR DIPERBARUI</span><strong>24 Juli 2026 · 22.42 WIT</strong></div>
             <i />
-            <div><span>SUMBER DATA & KEPERCAYAAN</span><strong>Dinas Pertanian · BPS · BMKG</strong></div>
+            <div><span>SUMBER DATA</span><strong>Sumber data lintas perangkat daerah</strong></div>
             <b>Tinggi</b>
             <button className="profile" aria-label="Menu profil">SD</button>
           </div>

@@ -19,8 +19,10 @@ async function moduleFrom(path, preamble = "") {
   return import(`data:text/javascript;base64,${Buffer.from(`${preamble}\n${output}`).toString("base64")}`);
 }
 const rules = await moduleFrom("lib/early-warning-rules.ts");
+const presentation = await moduleFrom("lib/monitoring-presentation.ts");
+globalThis.__monitoringPresentation = presentation;
 const resolver = await moduleFrom("lib/monitoring-record-resolver.ts", `${Object.entries(datasets).map(([key,value])=>`const ${key}=${JSON.stringify(value)};`).join("\n")}const getRegionById=id=>({name:id});`);
-const collaboration = await moduleFrom("lib/collaboration-data.ts", `const raw=${JSON.stringify(collab)};const climateRisk=${JSON.stringify(datasets.climateRisk)};`);
+const collaboration = await moduleFrom("lib/collaboration-data.ts", `const raw=${JSON.stringify(collab)};const climateRisk=${JSON.stringify(datasets.climateRisk)};const {formatMonitoringDate,formatMonitoringSources,latestMonitoringTimestamp}=globalThis.__monitoringPresentation;`);
 globalThis.__riskRules = rules;
 const riskData = await moduleFrom("lib/climate-risk-data.ts", `const raw=${JSON.stringify(datasets.climateRisk)};const {alertStatus,riskLevel,riskRecommendations}=globalThis.__riskRules;`);
 const table = await moduleFrom("lib/monitoring-table.ts");
@@ -112,4 +114,15 @@ test("pagination covers empty, first, middle, last and invalid size", () => {
 test("collaboration date formatting is deterministic and modal metadata source is complete", async () => {
   assert.equal(collaboration.formatCollaborationDate("2026-07-24"),"24 Juli 2026"); assert.equal(collaboration.formatCollaborationDate("invalid"),null); assert.equal(collaboration.formatCollaborationDate("2026-02-31"),null);
   const page=await readFile("components/collaboration/CollaborationPage.tsx","utf8"); for(const text of["ID kegiatan","Judul kegiatan","Tanggal mulai","Tenggat","Tanggal selesai","Status monitoring","Status resolusi"]) assert.ok(page.includes(text)); assert.ok(!page.includes("Related records valid"));
+});
+
+test("collaboration domain taxonomy and institution sources come from production records", async () => {
+  const expected=[...new Set(allActivities.map(item=>item.domain))];
+  assert.deepEqual(collaboration.collaborationDomainOptions,expected);
+  assert.ok(collaboration.collaborationDomainOptions.includes("Validasi Data"));
+  assert.deepEqual(collaboration.selectCollaborations("MT1-2026").items.filter(item=>item.domain==="Validasi Data").map(item=>item.id),["COL-MT1-001"]);
+  const sources=collaboration.collaborationActivitySources([allActivities[0],allActivities[0]]);
+  assert.equal(sources,"Sekretariat Daerah; Dinas PUPR; Dinas Pertanian");
+  const page=await readFile("components/collaboration/CollaborationPage.tsx","utf8");
+  assert.match(page,/collaborationDomainOptions\.map/);assert.doesNotMatch(page,/new Set\(selected\.items\.map\(item=>item\.domain\)/);
 });

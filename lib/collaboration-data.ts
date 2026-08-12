@@ -1,18 +1,21 @@
 import raw from "@/data/monitoring/collaboration-monitoring.json";
 import climateRisk from "@/data/monitoring/climate-risk-monitoring.json";
 import type { RelatedRecordReference } from "@/lib/monitoring-record-resolver";
+import { formatMonitoringDate, formatMonitoringSources, latestMonitoringTimestamp } from "@/lib/monitoring-presentation";
 export const institutions = raw.institutions;
 type RawActivity = (typeof raw.activities)[number] | (typeof raw.activities_mt1)[number];
 export type CollaborationActivity = Omit<RawActivity, "related_records"> & { related_records: RelatedRecordReference[] };
 export const collaborationActivities = [...raw.activities, ...raw.activities_mt1] as CollaborationActivity[];
+export const collaborationDomainOptions = [...new Set(collaborationActivities.map(activity => activity.domain))];
 export const collaborationCutoff = raw.metadata.cutoff_date;
-const monthNames = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 export function formatCollaborationDate(value: string | null) {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const [year, month, day] = value.split("-").map(Number), days = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  return month >= 1 && month <= 12 && day >= 1 && day <= days ? `${day} ${monthNames[month-1]} ${year}` : null;
+  const formatted = formatMonitoringDate(value);
+  return formatted === "Belum tersedia" ? null : formatted;
 }
 export function institution(id: string) { return institutions.find(x => x.id === id) ?? null; }
+export function collaborationActivitySources(activities: readonly CollaborationActivity[]) {
+  return formatMonitoringSources(activities.flatMap(activity => [activity.coordinator_institution_id, ...activity.participant_institution_ids]).map(id => institution(id)?.name));
+}
 export type CollaborationMetrics = ReturnType<typeof aggregateCollaborationMetrics>;
 export function aggregateCollaborationMetrics(activities: readonly CollaborationActivity[]) {
   const monitored = activities.filter(x => x.monitoring_status !== "not_monitored");
@@ -23,7 +26,7 @@ export function aggregateCollaborationMetrics(activities: readonly Collaboration
     averageProgress: monitored.length ? monitored.reduce((sum, x) => sum + x.progress_percent, 0) / monitored.length : null,
     highCriticalPriorityCount: monitored.filter(x => ["Tinggi", "Kritis"].includes(x.priority)).length,
     validationPercent: monitored.length ? approvedRecordCount / monitored.length * 100 : null,
-    latestUpdate: monitored.map(x => x.updated_at).sort().at(-1) ?? null, monitoredRecordCount: monitored.length, approvedRecordCount };
+    latestUpdate: latestMonitoringTimestamp(monitored.map(x => x.updated_at)), monitoredRecordCount: monitored.length, approvedRecordCount };
 }
 export function selectCollaborations(seasonId: string, regionId = "93.01") {
   const items = collaborationActivities.filter(x => x.season_id === seasonId && (regionId === "93.01" || x.region_id === regionId));

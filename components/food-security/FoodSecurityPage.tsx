@@ -8,10 +8,11 @@ import { MonitoringLineChart } from "@/components/ui/MonitoringLineChart";
 import { getRegionById, regions } from "@/lib/data-foundation";
 import { buildFoodSecurityDetailModel, foodSecurityFormula, formatFoodValue, getFoodSecurityChartData, resilienceDisclaimer, resilienceWeights, selectFoodSecurity, type FoodSecurityDetailModel } from "@/lib/food-security-data";
 import { resilienceFormulaMetadata, selectOperationalResilience } from "@/lib/resilience-data";
+import { formatMonitoringDate, formatMonitoringStatus, formatMonitoringTimestamp } from "@/lib/monitoring-presentation";
 
 const districts = regions.filter(region => region.parent_id === "93.01" && region.administrative_type === "district");
 
-const validationLabel = (status: FoodSecurityDetailModel["validationStatus"]) => status === "approved" ? "Disetujui" : status === "pending" ? "Menunggu validasi" : "Sebagian menunggu validasi";
+const validationLabel = (status: FoodSecurityDetailModel["validationStatus"]) => status === "mixed" ? "Sebagian menunggu validasi" : formatMonitoringStatus(status);
 
 function FoodDetail({ item, onClose }: { item: FoodSecurityDetailModel; onClose: () => void }) {
   const panel = useRef<HTMLDivElement>(null);
@@ -26,7 +27,7 @@ function FoodDetail({ item, onClose }: { item: FoodSecurityDetailModel; onClose:
           <div><dt>Kebutuhan periode</dt><dd>{formatFoodValue(item.seasonNeedTon)}</dd></div><div><dt>Surplus/Defisit</dt><dd>{formatFoodValue(item.surplusDeficitTon)}</dd></div><div><dt>Kebutuhan harian</dt><dd>{formatFoodValue(item.dailyNeedTon)}</dd></div><div><dt>Ketahanan stok</dt><dd>{formatFoodValue(item.stockResilienceDays, "hari")}</dd></div>
         </dl>
         <h3>Formula neraca</h3><p>{foodSecurityFormula.physicalStock}</p><p>Arus bersih = pasokan masuk − pasokan keluar − susut operasional.</p><p>{foodSecurityFormula.riceProduction}</p><p>{foodSecurityFormula.availability}</p><p>{foodSecurityFormula.requirement}</p><p>{foodSecurityFormula.surplus}</p><p>{foodSecurityFormula.stockResilience}</p><p>{foodSecurityFormula.rounding}</p>
-        <h3>Periode, sumber, dan validasi</h3><dl className="detail-metrics"><div><dt>Musim</dt><dd>{item.seasonLabel}</dd></div><div><dt>Cut-off</dt><dd>{item.cutoff}</dd></div><div><dt>Status monitoring</dt><dd>Dipantau</dd></div><div><dt>Status validasi</dt><dd>{validationLabel(item.validationStatus)}</dd></div><div><dt>Jenis sumber</dt><dd>Prototipe</dd></div><div><dt>Jenis data</dt><dd>Simulasi</dd></div><div><dt>Diperbarui</dt><dd>{item.updatedAt}</dd></div></dl><p>Sumber: {item.sourceReference}</p>
+        <h3>Periode, sumber, dan validasi</h3><dl className="detail-metrics"><div><dt>Musim</dt><dd>{item.seasonLabel}</dd></div><div><dt>Cut-off</dt><dd>{formatMonitoringDate(item.cutoff)}</dd></div><div><dt>Status monitoring</dt><dd>Dipantau</dd></div><div><dt>Status validasi</dt><dd>{validationLabel(item.validationStatus)}</dd></div><div><dt>Jenis sumber</dt><dd>{formatMonitoringStatus("prototype")}</dd></div><div><dt>Jenis data</dt><dd>{formatMonitoringStatus("simulation")}</dd></div><div><dt>Diperbarui</dt><dd>{formatMonitoringTimestamp(item.updatedAt)}</dd></div></dl><p>Sumber: {item.sourceReference}</p>
         <p className="simulation-disclaimer">{resilienceDisclaimer}</p>
       </div>
       <footer><button onClick={onClose}>Tutup</button></footer>
