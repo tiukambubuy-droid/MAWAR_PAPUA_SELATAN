@@ -22,6 +22,7 @@ export type FoodSecurityMonthlySnapshot = {
 };
 export type FoodSecurityMetrics = {
   record: FoodSecurityRecord;
+  productionGkgTon: number;
   physicalStockTon: number;
   estimatedRiceProductionTon: number;
   annualNeedTon: number;
@@ -31,6 +32,45 @@ export type FoodSecurityMetrics = {
   dailyNeedTon: number | null;
   stockResilienceDays: number | null;
 };
+export type FoodSecurityDetailModel = {
+  scopeType: "regency" | "district";
+  regionId: string;
+  regionName: string;
+  seasonId: string;
+  seasonLabel: string;
+  cutoff: string;
+  monitoringStatus: "monitored";
+  validationStatus: "approved" | "pending" | "mixed";
+  sourceType: "prototype";
+  dataType: "simulation";
+  sourceReference: string;
+  updatedAt: string;
+  bulogStockTon: number;
+  governmentReserveTon: number;
+  localWarehouseStockTon: number;
+  physicalStockTon: number;
+  productionGkgTon: number;
+  estimatedRiceProductionTon: number;
+  inboundSupplyTon: number;
+  outboundSupplyTon: number;
+  operationalLossTon: number;
+  netSupplyTon: number;
+  balanceAvailabilityTon: number;
+  seasonNeedTon: number;
+  surplusDeficitTon: number;
+  dailyNeedTon: number | null;
+  stockResilienceDays: number | null;
+};
+
+export const foodSecurityFormula = {
+  physicalStock: "Stok fisik = stok Bulog + cadangan pemerintah + stok gudang lokal.",
+  riceProduction: `Estimasi beras = produksi GKG × rendemen ${millingYield.rate.toLocaleString("id-ID")}% (presisi penuh).`,
+  availability: "Ketersediaan = stok fisik + estimasi beras + pasokan masuk − pasokan keluar − susut operasional.",
+  requirement: "Kebutuhan periode = populasi × konsumsi 92,4 kg/kapita/tahun × jumlah hari periode ÷ 365 ÷ 1.000.",
+  surplus: "Surplus/defisit = ketersediaan − kebutuhan periode.",
+  stockResilience: "Ketahanan stok = stok fisik ÷ kebutuhan harian.",
+  rounding: "Perhitungan dan agregasi memakai presisi penuh; pembulatan hanya dilakukan saat nilai ditampilkan.",
+} as const;
 
 export const foodSecurityMetadata = foodSecurityJson.metadata;
 export const foodSecurityRecords = foodSecurityJson.records as FoodSecurityRecord[];
@@ -63,7 +103,7 @@ export function calculateFoodSecurity(record: FoodSecurityRecord): FoodSecurityM
   const balanceAvailabilityTon = physicalStockTon + estimatedRiceProductionTon + record.inbound_supply_ton - record.outbound_supply_ton - record.operational_loss_ton;
   const dailyNeedTon = annualNeedTon > 0 ? annualNeedTon / 365 : null;
   return {
-    record, physicalStockTon, estimatedRiceProductionTon, annualNeedTon, seasonNeedTon,
+    record, productionGkgTon: production.gkg_production_ton, physicalStockTon, estimatedRiceProductionTon, annualNeedTon, seasonNeedTon,
     balanceAvailabilityTon, surplusDeficitTon: balanceAvailabilityTon - seasonNeedTon,
     dailyNeedTon, stockResilienceDays: dailyNeedTon ? physicalStockTon / dailyNeedTon : null,
   };
@@ -84,7 +124,12 @@ export function selectFoodSecurity(seasonId: string, regionId = "93.01", validat
     governmentReserveTon: items.reduce((sum, item) => sum + item.record.government_reserve_ton, 0),
     localWarehouseStockTon: items.reduce((sum, item) => sum + item.record.local_warehouse_stock_ton, 0),
     physicalStockTon,
+    productionGkgTon: total("productionGkgTon"),
     estimatedRiceProductionTon: total("estimatedRiceProductionTon"),
+    inboundSupplyTon: items.reduce((sum, item) => sum + item.record.inbound_supply_ton, 0),
+    outboundSupplyTon: items.reduce((sum, item) => sum + item.record.outbound_supply_ton, 0),
+    operationalLossTon: items.reduce((sum, item) => sum + item.record.operational_loss_ton, 0),
+    population: items.reduce((sum, item) => sum + item.record.population, 0),
     annualNeedTon,
     seasonNeedTon: total("seasonNeedTon"),
     balanceAvailabilityTon: total("balanceAvailabilityTon"),
@@ -94,6 +139,49 @@ export function selectFoodSecurity(seasonId: string, regionId = "93.01", validat
     total: records.length,
   };
   return { monitored: true, items, aggregate };
+}
+
+export function buildFoodSecurityDetailModel(seasonId: string, regionId = "93.01"): FoodSecurityDetailModel | null {
+  const selected = selectFoodSecurity(seasonId, regionId);
+  if (!selected.monitored || !selected.aggregate) return null;
+  const season = getSeasonById(seasonId);
+  const region = regions.find(item => item.id === regionId);
+  if (!season || !region) return null;
+  const records = selected.items.map(item => item.record);
+  const district = regionId === "93.01" ? null : selected.items[0];
+  if (regionId !== "93.01" && !district) return null;
+  const aggregate = selected.aggregate;
+  const validationStatus = aggregate.approved === aggregate.total ? "approved" : aggregate.approved === 0 ? "pending" : "mixed";
+  const sourceReference = [...new Set(records.map(record => record.source_reference))].join("; ");
+  return {
+    scopeType: regionId === "93.01" ? "regency" : "district",
+    regionId,
+    regionName: regionId === "93.01" ? "Kabupaten Merauke" : region.name,
+    seasonId,
+    seasonLabel: seasonId === "MT1-2026" ? "MT I 2026" : "MT II 2026",
+    cutoff: records.map(record => record.monitoring_date).sort().at(-1) ?? season.end_date,
+    monitoringStatus: "monitored",
+    validationStatus,
+    sourceType: "prototype",
+    dataType: "simulation",
+    sourceReference,
+    updatedAt: records.map(record => record.updated_at).sort().at(-1) ?? "",
+    bulogStockTon: aggregate.bulogStockTon,
+    governmentReserveTon: aggregate.governmentReserveTon,
+    localWarehouseStockTon: aggregate.localWarehouseStockTon,
+    physicalStockTon: aggregate.physicalStockTon,
+    productionGkgTon: aggregate.productionGkgTon,
+    estimatedRiceProductionTon: aggregate.estimatedRiceProductionTon,
+    inboundSupplyTon: aggregate.inboundSupplyTon,
+    outboundSupplyTon: aggregate.outboundSupplyTon,
+    operationalLossTon: aggregate.operationalLossTon,
+    netSupplyTon: aggregate.inboundSupplyTon - aggregate.outboundSupplyTon - aggregate.operationalLossTon,
+    balanceAvailabilityTon: aggregate.balanceAvailabilityTon,
+    seasonNeedTon: aggregate.seasonNeedTon,
+    surplusDeficitTon: aggregate.surplusDeficitTon,
+    dailyNeedTon: aggregate.annualNeedTon > 0 ? aggregate.annualNeedTon / 365 : null,
+    stockResilienceDays: aggregate.stockResilienceDays,
+  };
 }
 
 const snapshotCurve = foodSecurityJson.metadata.monthly_snapshot_curve;

@@ -51,6 +51,55 @@ test("production selector calculates stock, need, balance, resilience, and canon
   assert.equal(result.estimatedRiceProductionTon, production.records.filter(row => row.season_id === record.season_id && regionData.regions.find(region => region.id === row.region_id)?.parent_id === record.region_id && row.validation_status === "approved").reduce((sum, row) => sum + row.gkg_production_ton, 0) * 0.6339);
 });
 
+test("every district and county reconcile from documented availability components at full precision", () => {
+  const districtIds = ["93.01.01", "93.01.05", "93.01.06", "93.01.07", "93.01.11", "93.01.14"];
+  const sourceBefore = JSON.stringify(selector.foodSecurityRecords);
+  for (const seasonId of ["MT1-2026", "MT2-2026"]) {
+    const county = selector.selectFoodSecurity(seasonId).aggregate;
+    const districts = districtIds.map(regionId => selector.selectFoodSecurity(seasonId, regionId).aggregate);
+    assert.ok(districts.every(Boolean));
+    for (const row of districts) {
+      assert.equal(row.physicalStockTon, row.bulogStockTon + row.governmentReserveTon + row.localWarehouseStockTon);
+      assert.ok(Math.abs(row.estimatedRiceProductionTon - row.productionGkgTon * master.milling_yield.rate / 100) < 1e-10);
+      assert.ok(Math.abs(row.balanceAvailabilityTon - (row.physicalStockTon + row.estimatedRiceProductionTon + row.inboundSupplyTon - row.outboundSupplyTon - row.operationalLossTon)) < 1e-10);
+      assert.ok(Math.abs(row.surplusDeficitTon - (row.balanceAvailabilityTon - row.seasonNeedTon)) < 1e-10);
+    }
+    for (const field of ["bulogStockTon", "governmentReserveTon", "localWarehouseStockTon", "physicalStockTon", "productionGkgTon", "estimatedRiceProductionTon", "inboundSupplyTon", "outboundSupplyTon", "operationalLossTon", "annualNeedTon", "seasonNeedTon", "balanceAvailabilityTon", "surplusDeficitTon"]) {
+      assert.ok(Math.abs(county[field] - districts.reduce((sum, row) => sum + row[field], 0)) < 1e-8, `${seasonId} ${field}`);
+    }
+  }
+  const mt2 = selector.selectFoodSecurity("MT2-2026").aggregate;
+  assert.equal(mt2.inboundSupplyTon - mt2.outboundSupplyTon - mt2.operationalLossTon, 539);
+  assert.equal(mt2.balanceAvailabilityTon, 10240 + 174577 * 0.6339 + 539);
+  assert.ok(Math.abs(mt2.surplusDeficitTon - (mt2.balanceAvailabilityTon - mt2.seasonNeedTon)) < 1e-8);
+  assert.equal(JSON.stringify(selector.foodSecurityRecords), sourceBefore);
+  assert.deepEqual(selector.selectFoodSecurity("MT2-2026"), selector.selectFoodSecurity("MT2-2026"));
+});
+
+test("shared detail model represents county and district selectors without mutation or fallback", () => {
+  const before = JSON.stringify(selector.foodSecurityRecords);
+  for (const seasonId of ["MT1-2026", "MT2-2026"]) {
+    const model = selector.buildFoodSecurityDetailModel(seasonId, "93.01");
+    const aggregate = selector.selectFoodSecurity(seasonId, "93.01").aggregate;
+    assert.equal(model.scopeType, "regency");
+    assert.equal(model.regionId, "93.01");
+    assert.equal(model.seasonId, seasonId);
+    for (const field of ["bulogStockTon", "governmentReserveTon", "localWarehouseStockTon", "physicalStockTon", "productionGkgTon", "estimatedRiceProductionTon", "inboundSupplyTon", "outboundSupplyTon", "operationalLossTon", "balanceAvailabilityTon", "seasonNeedTon", "surplusDeficitTon", "stockResilienceDays"]) assert.equal(model[field], aggregate[field]);
+    assert.equal(model.netSupplyTon, model.inboundSupplyTon - model.outboundSupplyTon - model.operationalLossTon);
+    assert.deepEqual(model, selector.buildFoodSecurityDetailModel(seasonId, "93.01"));
+  }
+  const semangga = selector.buildFoodSecurityDetailModel("MT2-2026", "93.01.05");
+  const semanggaMetrics = selector.calculateFoodSecurity(selector.foodSecurityRecords.find(row => row.id === "FS-MT2-0105"));
+  assert.equal(semangga.scopeType, "district");
+  assert.equal(semangga.regionName, "Semangga");
+  assert.equal(semangga.productionGkgTon, 26553);
+  assert.equal(semangga.estimatedRiceProductionTon, semanggaMetrics.estimatedRiceProductionTon);
+  assert.equal(semangga.netSupplyTon, 74);
+  assert.equal(semangga.balanceAvailabilityTon, semanggaMetrics.balanceAvailabilityTon);
+  assert.equal(selector.buildFoodSecurityDetailModel("MT2-2026", "93.01.02"), null);
+  assert.equal(JSON.stringify(selector.foodSecurityRecords), before);
+});
+
 test("district aggregation, zero/null/not-monitored states, and simulation disclaimer remain distinct", () => {
   const all = selector.selectFoodSecurity("MT2-2026", "93.01");
   const one = selector.selectFoodSecurity("MT2-2026", "93.01.05");
@@ -70,6 +119,11 @@ test("food security page keeps global filters and accessible modal contract", as
   assert.match(page, /useAccessibleModal/);
   assert.match(page, /role="dialog" aria-modal="true"/);
   assert.match(page, /resilienceDisclaimer/);
+  for (const label of ["Stok Bulog", "Cadangan pemerintah", "Gudang lokal", "Produksi GKG", "Pasokan masuk", "Pasokan keluar", "Susut operasional", "Total ketersediaan", "Kebutuhan periode", "Surplus\/Defisit", "Cut-off", "Status monitoring", "Status validasi", "Jenis sumber", "Jenis data"]) assert.match(page, new RegExp(label));
+  assert.match(page, /foodSecurityFormula\.availability/);
+  assert.match(page, /foodSecurityFormula\.surplus/);
+  assert.match(page, /Disetujui/);
+  assert.match(page, /Menunggu validasi/);
   assert.match(shell, /Buka halaman \$\{label\}/);
   assert.match(shell, /Ketahanan Pangan/);
 });
@@ -96,6 +150,21 @@ test("stock breakdown is canonical and never synthesized", () => {
   const metrics=selector.selectFoodSecurity("MT2-2026").aggregate;
   assert.equal(metrics.bulogStockTon+metrics.governmentReserveTon+metrics.localWarehouseStockTon,metrics.physicalStockTon);
   assert.equal(metrics.physicalStockTon,10240);
+});
+
+test("not-monitored districts never receive food records, values, or snapshots", () => {
+  for (const regionId of ["93.01.02", "93.01.03", "93.01.08"]) for (const seasonId of ["MT1-2026", "MT2-2026"]) {
+    const selected = selector.selectFoodSecurity(seasonId, regionId);
+    assert.deepEqual(selected, { monitored: false, items: [], aggregate: null });
+    assert.equal(selector.getFoodSecurityChartData(seasonId, regionId).length, 0);
+    assert.equal(selector.foodSecurityMonthlySnapshots.some(row => row.region_id === regionId && row.season_id === seasonId), false);
+  }
+});
+
+test("domain selector contains no balancing residual or synthetic allocation mechanism", async () => {
+  assert.doesNotMatch(source, /Math\.random|seededNumber|balancing[_A-Za-z]*\s*[:=]|residual[_A-Za-z]*\s*[:=]/i);
+  assert.match(selector.foodSecurityFormula.availability, /pasokan masuk/);
+  assert.match(selector.foodSecurityFormula.rounding, /presisi penuh/);
 });
 
 test("monthly snapshots cover county and every monitored district with reconciled deterministic stages", () => {

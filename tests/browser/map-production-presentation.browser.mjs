@@ -241,6 +241,16 @@ await executeBrowserLifecycle({
     if(width>=768&&width<1200) assert.ok(foodLayout.stock.height!==foodLayout.resilience.height&&foodLayout.stock.bottom<=foodLayout.stock.y+foodLayout.stock.height+1);
     if(width<768) assert.ok(foodLayout.chart.bottom<=foodLayout.stock.y+1&&foodLayout.stock.bottom<=foodLayout.resilience.y+1);
     if ([1440,768,390].includes(width)) {
+      await evaluate(`(()=>{const selects=[...document.querySelectorAll('.food-security-page select')],season=selects.find(node=>node.closest('label')?.innerText.startsWith('Musim')),district=selects.find(node=>node.closest('label')?.innerText.startsWith('Distrik'));season.value='MT1-2026';season.dispatchEvent(new Event('change',{bubbles:true}));district.value='';district.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(40);
+      await evaluate("(()=>{const button=document.querySelector('.stock-card button');button.dataset.qaTrigger='county-detail';button.focus();button.click()})()"); await waitFor(".monitoring-modal");
+      let countyDetail = await evaluate("document.querySelector('.monitoring-modal').innerText");
+      assert.match(countyDetail,/Detail Kabupaten Merauke/); assert.match(countyDetail,/MT I 2026/); assert.match(countyDetail,/Cakupan Kabupaten/); assert.match(countyDetail,/Arus pasokan bersih\n387 ton/);
+      assert.equal(await evaluate("document.querySelector('.monitoring-modal-body').scrollWidth > document.querySelector('.monitoring-modal-body').clientWidth + 1"),false);
+      await evaluate("document.querySelector('.monitoring-modal').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))"); await waitUntil("!document.querySelector('.monitoring-modal')", "modal Kabupaten MT I tertutup"); await waitUntil("document.activeElement?.dataset.qaTrigger==='county-detail'", "fokus kembali ke pemicu Kabupaten");
+      await evaluate(`(()=>{const season=[...document.querySelectorAll('.food-security-page select')].find(node=>node.closest('label')?.innerText.startsWith('Musim'));season.value='MT2-2026';season.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(30);
+      await evaluate("document.querySelector('.stock-card button').click()"); await waitFor(".monitoring-modal"); countyDetail=await evaluate("document.querySelector('.monitoring-modal').innerText");
+      for(const value of ["MT II 2026","Cakupan Kabupaten","Pasokan masuk\n2.860 ton","Pasokan keluar\n2.180 ton","Susut operasional\n141 ton","Arus pasokan bersih\n539 ton"]) assert.ok(countyDetail.includes(value),`${width}: ${value}`);
+      await evaluate("document.querySelector('.monitoring-modal header button').click()"); await waitUntil("!document.querySelector('.monitoring-modal')", "modal Kabupaten MT II tertutup");
       const foodTooltipBox=()=>evaluate(`(()=>{const tip=document.querySelector('.food-security-tooltip'),card=document.querySelector('.food-balance-chart').getBoundingClientRect(),summary=document.querySelector('.food-balance-chart .monitoring-chart-summary').getBoundingClientRect();if(!tip)return null;const rect=tip.getBoundingClientRect(),style=getComputedStyle(tip);return{text:tip.innerText,inside:rect.left>=card.left-1&&rect.right<=card.right+1&&rect.top>=card.top-1&&rect.bottom<=card.bottom+1,belowSummary:rect.top>=summary.bottom-1,padding:parseFloat(style.paddingLeft),clientWidth:tip.clientWidth,scrollWidth:tip.scrollWidth,clientHeight:tip.clientHeight,scrollHeight:tip.scrollHeight,clipped:tip.scrollWidth>tip.clientWidth+1||tip.scrollHeight>tip.clientHeight+1}})()`);
       for (const index of [0,1,3]) {
         await evaluate(`document.querySelectorAll('.food-balance-chart .chart-point')[${index}].dispatchEvent(new MouseEvent('mouseover',{bubbles:true}))`); await sleep(25);
@@ -275,10 +285,17 @@ await executeBrowserLifecycle({
     await evaluate(`(()=>{const select=[...document.querySelectorAll('.food-security-page select')].find(node=>node.closest('label')?.innerText.startsWith('Distrik'));select.value='93.01.02';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(30);
     assert.equal(await evaluate("document.querySelector('.food-security-page .monitoring-empty')?.innerText"), "Belum dipantau");
     await evaluate(`(()=>{const select=[...document.querySelectorAll('.food-security-page select')].find(node=>node.closest('label')?.innerText.startsWith('Distrik'));select.value='93.01.05';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await waitFor(".food-security-page .monitoring-table tbody button");
+    await evaluate(`(()=>{const select=[...document.querySelectorAll('.food-security-page select')].find(node=>node.closest('label')?.innerText.startsWith('Musim'));select.value='MT2-2026';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(30);
     await evaluate("(()=>{const button=document.querySelector('.food-security-page .monitoring-table tbody button');button.dataset.qaTrigger='food';button.focus();button.click()})()"); await waitFor(".monitoring-modal[role=dialog]");
     await waitUntil("getComputedStyle(document.body).overflow==='hidden'", "body scroll lock modal Ketahanan Pangan");
     await waitUntil("document.querySelector('.monitoring-modal').contains(document.activeElement)", "fokus masuk modal Ketahanan Pangan");
-    await evaluate("document.querySelector('.monitoring-modal').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");
+    const foodDetailText = await evaluate("document.querySelector('.monitoring-modal-body').innerText");
+    for (const text of ["Stok Bulog", "Cadangan pemerintah", "Gudang lokal", "Produksi GKG", "Pasokan masuk", "Pasokan keluar", "Susut operasional", "Total ketersediaan", "Kebutuhan periode", "Surplus/Defisit", "Cut-off", "Status monitoring", "Status validasi", "Jenis sumber", "Jenis data", "Simulasi Prototipe"]) assert.ok(foodDetailText.includes(text), `detail pangan memuat ${text}`);
+    assert.match(foodDetailText, /Ketersediaan = stok fisik \+ estimasi beras \+ pasokan masuk/);
+    assert.match(foodDetailText, /Surplus\/defisit = ketersediaan/);
+    assert.match(await evaluate("document.querySelector('.monitoring-modal').innerText"),/Detail Semangga[\s\S]*Cakupan Distrik/);
+    for(const value of ["Produksi GKG\n26.553 ton","Pasokan masuk\n410 ton","Pasokan keluar\n315 ton","Susut operasional\n21 ton","Arus pasokan bersih\n74 ton"]) assert.ok((await evaluate("document.querySelector('.monitoring-modal').innerText")).includes(value));
+    await evaluate("document.querySelector('.monitoring-modal-backdrop').dispatchEvent(new MouseEvent('mousedown',{bubbles:true}))");
     await waitUntil("!document.querySelector('.monitoring-modal')", "modal Ketahanan Pangan tertutup");
     await waitUntil("document.activeElement?.dataset.qaTrigger==='food'", "fokus kembali dari modal Ketahanan Pangan");
     assert.notEqual(await evaluate("getComputedStyle(document.body).overflow"), "hidden");
@@ -288,10 +305,11 @@ await executeBrowserLifecycle({
       await send("Page.reload"); await waitFor(".food-security-page"); await sleep(350);
       assert.equal(await evaluate("location.href"), foodUrl);
       assert.equal(await evaluate("document.querySelector('.food-security-page .monitoring-kpis strong')?.innerText"), foodKpi);
+      await evaluate(`(()=>{const select=[...document.querySelectorAll('.food-security-page select')].find(node=>node.closest('label')?.innerText.startsWith('Musim'));select.value='MT1-2026';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(40);
+      assert.match(await evaluate("location.href"), /season=MT1-2026/);
+      await evaluate("history.back()"); await sleep(80); assert.match(await evaluate("location.href"), /season=MT2-2026/);
+      await evaluate("history.forward()"); await sleep(80); assert.match(await evaluate("location.href"), /season=MT1-2026/);
       await evaluate(`(()=>{const select=[...document.querySelectorAll('.food-security-page select')].find(node=>node.closest('label')?.innerText.startsWith('Musim'));select.value='MT2-2026';select.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(40);
-      assert.match(await evaluate("location.href"), /season=MT2-2026/);
-      await evaluate("history.back()"); await sleep(80); assert.match(await evaluate("location.href"), /season=MT1-2026/);
-      await evaluate("history.forward()"); await sleep(80); assert.match(await evaluate("location.href"), /season=MT2-2026/);
     }
     await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Infrastruktur dan Sarana\"]')?.click()"); await waitFor(".infrastructure-page");
     assert.equal(await evaluate("document.querySelectorAll('.infrastructure-page [role=tab]').length"), 2);
@@ -433,10 +451,16 @@ await executeBrowserLifecycle({
   assert.equal(await evaluate("document.querySelectorAll('.season-line-card .chart-value-label').length"), 0);
   await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Ketahanan Pangan\"]')?.click()"); await waitFor(".food-security-page");
   const setFoodContext = async (season,district) => { await evaluate(`(()=>{const selects=[...document.querySelectorAll('.food-security-page select')],season=selects.find(node=>node.closest('label')?.innerText.startsWith('Musim')),district=selects.find(node=>node.closest('label')?.innerText.startsWith('Distrik'));season.value=${JSON.stringify(season)};season.dispatchEvent(new Event('change',{bubbles:true}));district.value=${JSON.stringify(district)};district.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(50); };
-  for (const district of ["93.01.01","93.01.05","93.01.06","93.01.07","93.01.11","93.01.14"]) {
-    await setFoodContext("MT2-2026",district);
-    assert.equal(await evaluate("document.querySelectorAll('.food-balance-chart .chart-point').length"),4,`${district} harus memiliki empat titik actual MT II`);
-    assert.deepEqual(await evaluate("[...document.querySelectorAll('.food-balance-chart .chart-x-label')].map(node=>node.textContent)"),["Apr","Mei","Jun","Jul","Agu","Sep"]);
+  for (const season of ["MT1-2026", "MT2-2026"]) for (const district of ["", "93.01.01","93.01.05","93.01.06","93.01.07","93.01.11","93.01.14"]) {
+    await setFoodContext(season,district);
+    assert.equal(await evaluate("document.querySelectorAll('.food-security-page .monitoring-kpis article').length"),6,`${season} ${district || "kabupaten"} memiliki KPI`);
+    assert.equal(await evaluate("/undefined|NaN/.test(document.querySelector('.food-security-page').innerText)"),false);
+    assert.equal(await evaluate("document.querySelectorAll('.food-balance-chart .chart-point').length"),season === "MT2-2026" ? 4 : 6);
+  }
+  for (const season of ["MT1-2026", "MT2-2026"]) for (const district of ["93.01.02", "93.01.03", "93.01.08"]) {
+    await setFoodContext(season,district);
+    assert.equal(await evaluate("document.querySelector('.food-security-page .monitoring-empty')?.innerText"),"Belum dipantau");
+    assert.equal(await evaluate("document.querySelectorAll('.food-security-page .monitoring-kpis').length"),0);
   }
   const resilienceValues = () => evaluate(`(()=>{const value=label=>[...document.querySelectorAll('.resilience-card dl>div')].find(node=>node.querySelector('dt')?.childNodes[0]?.textContent===label)?.querySelector('dd')?.innerText;const kpi=label=>[...document.querySelectorAll('.food-security-page .monitoring-kpis article')].find(node=>node.querySelector('span')?.innerText===label)?.querySelector('strong')?.innerText;return{availability:value('Ketersediaan'),production:value('Capaian produksi'),irrigation:value('Kesiapan irigasi'),inputs:value('Pemenuhan sarana'),validation:value('Validasi'),total:kpi('Indikator Resiliensi')}})()`);
   await setFoodContext("MT1-2026","");
