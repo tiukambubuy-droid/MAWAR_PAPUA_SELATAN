@@ -58,6 +58,7 @@
   .executive-production-modal footer button{flex:1;justify-content:center}
   .executive-production-modal footer>span{display:none}
 }
+.executive-kpis em.comparison-unavailable{color:#6b7a73;font-weight:650}
 
 /* TASK 006C: executive-only map, chart and compact operational layout. */
 .executive-dashboard .executive-map-stage{height:390px;display:grid;grid-template-rows:minmax(0,1fr) auto;overflow:hidden}

@@ -27,6 +27,7 @@ import { fitToBounds } from "@/lib/visualization";
 import { createBigMapRequestController, createBigMapViewCallbacks, reduceBigMapViewState, type BigMapRequestController, type BigMapViewState } from "@/lib/big-map-request-controller";
 import { displayedExecutiveRegionId } from "@/lib/executive-map-interaction";
 import { formatMapRegionLabel } from "@/lib/map-region-search";
+import { formatYearOverYearComparison, selectExecutiveYearOverYearComparisons, type YearOverYearIndicatorId } from "@/lib/year-over-year-comparison";
 
 type PageName = "Peta Lahan" | "Musim Tanam" | "Produksi";
 
@@ -80,13 +81,15 @@ export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: 
   const finalComparison = compareProjectedFinalToCompletedSeason();
   const percentChange = (left: number, right: number) => left ? (right - left) / left * 100 : 0;
   const selectedRow = productionRows.find(row => row.id === districtId);
+  const comparisonModels = selectExecutiveYearOverYearComparisons({ seasonId, regionId:selectedDistrict?.id??"93.01", period:currentSeason?.reporting_cutoff??null, monitored:!selectedDistrict||selectedDistrict.monitoring_status==="active", values:{planting_area:planted,harvested_area:harvested,gkg_production:gkg,productivity:production.yieldRate} });
+  const comparisons = new Map(comparisonModels.map(model=>[model.indicator_id,model]));
 
   const kpis = [
-    { Icon: Sprout, label: "Luas Tanam", value: format(planted), unit: "ha", change: "8,4%" },
-    { Icon: LandPlot, label: "Luas Panen", value: format(harvested), unit: "ha", change: "7,1%" },
-    { Icon: Wheat, label: "Produksi GKG", value: format(gkg), unit: "ton", change: "9,6%" },
-    { Icon: Gauge, label: "Produktivitas", value: format(production.yieldRate, 2), unit: "ton/ha", change: "1,2%" },
-    { Icon: PackageCheck, label: "Estimasi Beras", value: format(rice), unit: "ton", change: "9,2%" },
+    { Icon: Sprout, label: "Luas Tanam", value: format(planted), unit: "ha", indicatorId:"planting_area" as YearOverYearIndicatorId },
+    { Icon: LandPlot, label: "Luas Panen", value: format(harvested), unit: "ha", indicatorId:"harvested_area" as YearOverYearIndicatorId },
+    { Icon: Wheat, label: "Produksi GKG", value: format(gkg), unit: "ton", indicatorId:"gkg_production" as YearOverYearIndicatorId },
+    { Icon: Gauge, label: "Produktivitas", value: format(production.yieldRate, 2), unit: "ton/ha", indicatorId:"productivity" as YearOverYearIndicatorId },
+    { Icon: PackageCheck, label: "Estimasi Beras", value: format(rice), unit: "ton", indicatorId:null },
   ];
 
   return (
@@ -108,7 +111,7 @@ export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: 
       </section>
 
       <section className="executive-kpis">
-        {kpis.map(({ Icon, ...item }) => <article className="card" key={item.label}><i><Icon size={26}/></i><div><span>{item.label}</span><strong>{item.value} <small>{item.unit}</small></strong><em>{item.label === "Estimasi Beras" ? compactYieldNote : <>↑ {item.change} <b>vs 2025</b></>}</em></div></article>)}
+        {kpis.map(({Icon,...item})=>{const comparison=item.indicatorId?comparisons.get(item.indicatorId):null,comparisonText=comparison?formatYearOverYearComparison(comparison):compactYieldNote;return <article className="card" key={item.label}><i><Icon size={26}/></i><div><span>{item.label}</span><strong>{item.value} <small>{item.unit}</small></strong><em className={comparison?.direction==="unavailable"?"comparison-unavailable":undefined} aria-label={comparison?`${item.label}: ${comparisonText}`:undefined}>{comparisonText}</em></div></article>})}
       </section>
 
       <section className="executive-primary">
@@ -130,7 +133,7 @@ export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: 
         </div>
         <article className="card top-regions"><ExecutiveTitle title="WILAYAH KONTRIBUTOR TERBESAR" action={() => onNavigate("Produksi")}/><div>{productionRows.slice().sort((a,b)=>b.gkg-a.gkg).slice(0,5).map(row=><p key={row.id}><span>{row.name}</span><i><b style={{width:`${row.gkg/Math.max(...productionRows.map(item=>item.gkg))*100}%`}}/></i><strong>{format(row.gkg)}</strong><em>{format(row.gkg/production.gkg*100,1)}%</em></p>)}</div></article>
         <article className="card system-summary"><ExecutiveTitle title="RINGKASAN SISTEM"/><div>{[
-          `Luas tanam mencapai ${format(planted)} ha, naik 8,4% dibanding tahun 2025.`,
+          `Luas tanam mencapai ${format(planted)} ha. Pembanding 2025 belum tersedia.`,
           `Fase dominan mengikuti data monitoring ${currentSeason?.name ?? "musim terpilih"}.`,
           `Produksi GKG mencapai ${format(gkg)} ton atau ${format(achievement,1)}% dari target.`,
           `Estimasi beras mencapai ${format(rice)} ton. ${yieldNote}`,
