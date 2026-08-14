@@ -1,15 +1,18 @@
 "use client";
 
 import { createPortal } from "react-dom";
+import { useRef } from "react";
 import {
-  Activity, AlertTriangle, BarChart3, CalendarDays, CheckCircle2,
+  Activity, AlertTriangle, CalendarDays, CheckCircle2,
   Download, Eye, FileCheck2, Gauge, MapPinned, PackageCheck,
-  Printer, Scale, Sprout, Target, TrendingDown, TrendingUp, Wheat, X,
+  Printer, Scale, Sprout, Target, Wheat, X,
 } from "lucide-react";
 import type { ProductionRecord } from "@/types/production";
 import type { Season } from "@/lib/data-foundation";
 import { useAccessibleModal } from "@/components/ui/useAccessibleModal";
 import { mawarReportSlug, printWithMawarTitle } from "@/lib/report-branding";
+import { buildProductionModalPresentation } from "@/lib/public-presentation";
+import { formatMonitoringDate, formatMonitoringSeason } from "@/lib/monitoring-presentation";
 
 const number = (value: number, decimals = 0) =>
   value.toLocaleString("id-ID", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
@@ -19,7 +22,7 @@ export function hasSupportedCause(record: ProductionRecord, causeType: string) {
   return Boolean(causes && Object.prototype.hasOwnProperty.call(causes, causeType) && causes[causeType]);
 }
 
-export function ProductionDetailModal({ row, recordId, seasonId, regionId, context, district, village, season, onClose }: {
+export function ProductionDetailModal({ row, recordId, seasonId, regionId, context, village, season, onClose }: {
   row: ProductionRecord;
   recordId: string;
   seasonId: string;
@@ -30,11 +33,12 @@ export function ProductionDetailModal({ row, recordId, seasonId, regionId, conte
   season: Season | null;
   onClose: () => void;
 }) {
+  const dialogRef = useRef<HTMLElement>(null);
   const achievement = row.gkg / row.target * 100;
   const condition = row.validation <= 83
     ? { label: "Perlu Validasi", tone: "danger", Icon: AlertTriangle, explanation: "Tingkat validasi record memerlukan verifikasi lanjutan." }
     : achievement < 86
-      ? { label: "Produksi Turun", tone: "down", Icon: TrendingDown, explanation: "Produksi berada di bawah musim sebelumnya dan target berjalan." }
+      ? { label: "Di bawah target", tone: "down", Icon: AlertTriangle, explanation: "Capaian produksi masih berada di bawah target berjalan." }
       : achievement < 92
         ? { label: "Waspada", tone: "warning", Icon: AlertTriangle, explanation: "Capaian masih dapat ditingkatkan melalui penguatan pengendalian lapangan." }
         : { label: "Baik", tone: "good", Icon: CheckCircle2, explanation: "Produksi sesuai target dan produktivitas berada pada tingkat yang baik." };
@@ -44,16 +48,12 @@ export function ProductionDetailModal({ row, recordId, seasonId, regionId, conte
     `Tingkat validasi record sebesar ${row.validation}%.`,
     `Produktivitas terukur ${number(row.yieldRate, 2)} ton/ha.`,
   ];
-  const previous = [0.84, 0.89, 0.93, 1].map(factor => Math.round(row.gkg * factor));
-  const comparisonLabels = ["MT I 2025", "MT II 2025", "Musim sebelumnya", season?.display_name ?? "Musim aktif"];
-  const maxComparison = Math.max(...previous);
-  const change = (previous[3] - previous[2]) / previous[2] * 100;
-  const selectedVillage = row.level === "Kampung" || row.level === "Kelurahan" ? row.name : village === "Semua Kampung" ? row.name : village;
-  const selectedDistrict = row.level === "Distrik" ? row.name : district;
+  const presentation = buildProductionModalPresentation(row, seasonId, season?.reporting_cutoff ?? "");
+  const selectedVillage = presentation?.regionName ?? village;
 
-  useAccessibleModal(onClose);
+  useAccessibleModal(onClose, dialogRef);
 
-  if (row.id !== recordId || row.id !== regionId || season?.season_id !== seasonId || context !== "production") return null;
+  if (!presentation || row.id !== recordId || row.id !== regionId || season?.season_id !== seasonId || context !== "production") return null;
 
   const handlePrint = () => {
     document.body.classList.add("production-detail-printing");
@@ -65,16 +65,16 @@ export function ProductionDetailModal({ row, recordId, seasonId, regionId, conte
 
   return createPortal(
     <div className="production-detail-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="production-detail-modal" role="dialog" aria-modal="true" aria-labelledby="production-detail-title">
+      <section ref={dialogRef} className="production-detail-modal" role="dialog" aria-modal="true" aria-labelledby="production-detail-title" tabIndex={-1}>
         <header className="production-detail-header">
           <div className="production-detail-identity">
-            <small>MAWAR PAPUA SELATAN · DETAIL PRODUKSI PER KAMPUNG</small>
-            <h2 id="production-detail-title">{selectedVillage}</h2>
+            <small>MAWAR PAPUA SELATAN</small>
+            <h2 id="production-detail-title">{presentation.title}</h2>
             <div>
-              <span><MapPinned size={14} /> Distrik {selectedDistrict}</span>
-              <span>Kabupaten Merauke</span>
-              <span><Sprout size={14} /> {season?.name}</span>
-              <span><CalendarDays size={14} /> {season?.year}</span>
+              <span><MapPinned size={14} /> {presentation.title.replace("Detail Produksi ", "")} {presentation.regionName}</span>
+              <span>ID {presentation.regionId}</span><span>{presentation.parentRegency}</span>
+              <span><Sprout size={14} /> {formatMonitoringSeason(presentation.seasonId)}</span>
+              <span><CalendarDays size={14} /> Cut-off {formatMonitoringDate(presentation.cutoff)}</span>
             </div>
           </div>
           <div className="production-detail-header-actions">
@@ -100,20 +100,14 @@ export function ProductionDetailModal({ row, recordId, seasonId, regionId, conte
 
           <section className="production-detail-grid-main">
             <article className="production-detail-card production-period-card">
-              <div className="production-detail-card-title"><BarChart3 size={17} /> Perbandingan Produksi</div>
-              <div className="production-period-bars">{previous.map((value, index) =>
-                <div key={comparisonLabels[index]}><span>{comparisonLabels[index]}</span><i><em style={{ width: `${value / maxComparison * 100}%` }} /></i><b>{number(value)} ton</b></div>
-              )}</div>
-              <div className={`production-change ${change >= 0 ? "up" : "down"}`}>
-                {change >= 0 ? <TrendingUp size={19} /> : <TrendingDown size={19} />}
-                <span><b>{change >= 0 ? "Naik" : "Turun"} {number(Math.abs(change), 1)}%</b><small>Selisih {number(Math.abs(previous[3] - previous[2]))} ton dibanding MT I 2026</small></span>
-              </div>
+              <div className="production-detail-card-title"><Activity size={17} /> Perbandingan Produksi</div>
+              <div className="production-comparison-unavailable" role="status">Pembanding 2025 belum tersedia</div>
             </article>
 
             <article className="production-detail-card production-condition-card">
               <div className="production-detail-card-title"><Activity size={17} /> Kondisi Produksi</div>
               <span className={`production-condition-badge large ${condition.tone}`}><ConditionIcon size={19} /> {condition.label}</span>
-              <p>{condition.explanation}</p>
+              <p>{condition.tone === "down" ? "Capaian produksi masih berada di bawah target berjalan." : condition.explanation}</p>
               <div className="production-condition-meter"><i><em style={{ width: `${Math.min(100, achievement)}%` }} /></i><span>Capaian {number(achievement, 1)}%</span></div>
             </article>
           </section>
@@ -129,14 +123,14 @@ export function ProductionDetailModal({ row, recordId, seasonId, regionId, conte
             </article>
             <article className="production-detail-card">
               <div className="production-detail-card-title"><FileCheck2 size={17} /> Informasi Validasi</div>
-              <dl><div><dt>Update terakhir</dt><dd>24 Juli 2026</dd></div><div><dt>Tingkat validasi</dt><dd>{row.validation}%</dd></div><div><dt>Sumber data</dt><dd>Petugas Lapangan (PPL)</dd></div><div><dt>Metode estimasi</dt><dd>Sampling ubinan & rendemen</dd></div></dl>
+              <dl><div><dt>Scope</dt><dd>{presentation.scope}</dd></div><div><dt>Status monitoring</dt><dd>{presentation.monitoringStatus}</dd></div><div><dt>Update terakhir</dt><dd>{presentation.updatedAt}</dd></div><div><dt>Tingkat validasi</dt><dd>{presentation.validation}</dd></div><div><dt>Tipe sumber</dt><dd>{presentation.sourceType}</dd></div><div><dt>Tipe data</dt><dd>{presentation.dataType}</dd></div></dl>
             </article>
           </section>
 
           <section className="production-detail-card production-detail-insight">
-            <div className="production-detail-card-title"><TrendingUp size={17} /> Insight Produksi</div>
+            <div className="production-detail-card-title"><Activity size={17} /> Insight Produksi</div>
             <div>
-              <p><TrendingUp size={16} />Produksi meningkat {number(change, 1)}% dibanding MT sebelumnya.</p>
+              <p><Activity size={16} />Pembanding 2025 belum tersedia.</p>
               <p><Gauge size={16} />Produktivitas {row.yieldRate >= 5.5 ? "di atas" : "mendekati"} rata-rata distrik.</p>
               <p><PackageCheck size={16} />Estimasi beras mencapai {number(row.rice)} ton.</p>
               <p><Target size={16} />Target {achievement >= 90 ? "diperkirakan tercapai apabila tren tetap stabil" : "memerlukan percepatan dukungan lapangan"}.</p>
@@ -146,7 +140,7 @@ export function ProductionDetailModal({ row, recordId, seasonId, regionId, conte
         </div>
 
         <footer className="production-detail-footer">
-          <span>MAWAR Papua Selatan · Data demonstrasi · diperbarui 24 Juli 2026</span>
+          <span>MAWAR Papua Selatan · Data demonstrasi · diperbarui {presentation.updatedAt}</span>
           <div><button aria-label="Tutup detail produksi" onClick={onClose}><X size={16} /> Tutup</button><button aria-label="Cetak detail produksi" onClick={handlePrint}><Printer size={16} /> Cetak</button><button className="primary" aria-label="Export detail produksi ke PDF" onClick={handlePrint}><Download size={16} /> Export PDF</button></div>
         </footer>
       </section>

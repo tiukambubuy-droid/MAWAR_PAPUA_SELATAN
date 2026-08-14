@@ -23,7 +23,7 @@ export type ProductionDistrict = {
 export type ProductionRecord = {
   id: string;
   name: string;
-  level: "Distrik" | "Kampung" | "Kelurahan" | "Kelompok Tani";
+  level: "Kabupaten" | "Distrik" | "Kampung" | "Kelurahan" | "Kelompok Tani";
   harvested: number;
   yieldRate: number;
   gkg: number;

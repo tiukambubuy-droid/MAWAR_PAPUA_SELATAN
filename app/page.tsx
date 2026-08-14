@@ -26,6 +26,7 @@ import { createBigMapRequestController, createBigMapViewCallbacks, reduceBigMapV
 import { mappedLandRiskDefinition, phaseColors, reduceMapBreadcrumb, riskColors, selectPhaseMonitoring, selectRiskMonitoring } from "@/lib/map-monitoring";
 import { defineLandMetric, formatPresentationValue, getValidationSummary, resolveTableRegionNames } from "@/lib/presentation-selectors";
 import { clampPan, clampZoom, fitToBounds, isMapDrag, prioritizedMapLabels, resetMapCamera } from "@/lib/visualization";
+import { districtMonitoringCoverage } from "@/lib/public-presentation";
 import { createMapRegionOptions, districtIdForMapRegion, filterMapRegionOptions, formatMapRegionLabel, REGION_SEPARATOR } from "@/lib/map-region-search";
 
 const activeRegionCounts = getActiveMonitoringRegionCounts();
@@ -52,9 +53,7 @@ type MapLevel = "province" | "district";
 type LandLayer = "Luas Tanam" | "Fase Tanam" | "Tingkat Risiko";
 type LandTableRow = { cells: string[]; statusIndex: number; validationIndex: number };
 
-const regencyRows: LandTableRow[] = [
-  { cells: ["Merauke", "22 distrik", "38.180 ha", "31.854 ha", "174.577 ton", "Aktif", "91%"], statusIndex: 5, validationIndex: 6 },
-];
+const monitoringCoverage = districtMonitoringCoverage();
 
 function districtVillageCount(name: string) {
   const district = getRegionByName(name, "district");
@@ -623,7 +622,7 @@ function LandPage() {
     if (mapContext.level === "province") return {
       title: "REKAP DATA KABUPATEN MERAUKE",
       headers: ["Kabupaten", "Jumlah Distrik", "Luas Tanam", "Luas Panen", "Produksi GKG", "Status Data", "Validasi"],
-      rows: regencyRows.filter(row => row.cells[0] === "Merauke"),
+      rows: [{ cells: ["Merauke", monitoringCoverage.label, formatPresentationValue(aggregateRegion("93.01", filters.seasonId).planting_realization_ha, "ha"), formatPresentationValue(aggregateRegion("93.01", filters.seasonId).harvested_area_ha, "ha"), formatPresentationValue(aggregateRegion("93.01", filters.seasonId).gkg_production_ton, "ton"), "Aktif", `${Math.round(aggregateRegion("93.01", filters.seasonId).validation_rate)}%`], statusIndex: 5, validationIndex: 6 }],
     };
     if (!mapContext.selectedName) return {
       title: "REKAP DISTRIK KABUPATEN MERAUKE",
@@ -1042,7 +1041,7 @@ function HomeContent() {
             <div><span>TERAKHIR DIPERBARUI</span><strong>24 Juli 2026 · 22.42 WIT</strong></div>
             <i />
             <div><span>SUMBER DATA</span><strong>Sumber data lintas perangkat daerah</strong></div>
-            <b>Tinggi</b>
+            <b aria-label="Kualitas data: Tinggi">Kualitas data: Tinggi</b>
             <button className="profile" aria-label="Menu profil">SD</button>
           </div>
         </header>

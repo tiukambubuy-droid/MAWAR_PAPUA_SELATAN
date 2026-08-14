@@ -2,7 +2,8 @@
 import { useMemo, useState } from "react";
 import { plantingSeasons as initialSeasons } from "@/data/planting-seasons";
 import { monitoringRows, phaseComposition, seasonMonths } from "@/lib/season-aggregations";
-import { aggregateRegion, getChildrenByRegionId, getRegionById, getSeasonKpis, regions } from "@/lib/data-foundation";
+import { aggregateRegion, getChildrenByRegionId, getRegionById, getSeasonKpis, productionRecords, regions } from "@/lib/data-foundation";
+import { formatMonitoringTimestamp, latestMonitoringTimestamp } from "@/lib/monitoring-presentation";
 import { useDashboardFilters } from "@/components/DashboardFilterProvider";
 import { buildSeasonInsights } from "@/lib/season-insights";
 import type { MonitoringRow, PlantingSeason } from "@/types/planting-season";
@@ -57,6 +58,7 @@ export default function SeasonPage() {
   const entityLabel = selectedDistrict || selectedVillage ? "Kampung/Kelurahan" : "Distrik";
   const unavailable = (selectedDistrict && selectedDistrict.monitoring_status !== "active") ||
     (selectedVillage && selectedVillage.monitoring_status !== "active");
+  const updatedAt = formatMonitoringTimestamp(latestMonitoringTimestamp(productionRecords.filter(item => item.season_id === seasonId && (scopeKey === "93.01" || item.region_id === scopeKey || getRegionById(item.region_id)?.parent_id === scopeKey)).map(item => item.updated_at)));
 
   const changeYear = (next: number) => {
     setYear(next);
@@ -78,7 +80,7 @@ export default function SeasonPage() {
     <section className="card season-command-bar"><SeasonFilters years={years} year={year} onYear={changeYear} seasons={yearSeasons} seasonId={seasonId} onSeason={value => { setSeason(value); setDetail(null); }} /><RegionFilters districts={districts} villages={villages} districtId={districtId} villageId={villageId} onDistrict={value => { setDistrict(value); setDetail(null); }} onVillage={value => { setVillage(value); setDetail(null); }} /><div className="season-context"><span>♨</span><div><small>Komoditas</small><strong>Padi</strong></div></div><div className="season-context"><span>●</span><div><small>Wilayah Aktif</small><strong>{scope}</strong></div></div><button className="manage-season" onClick={() => setManageOpen(true)}>⚙ Kelola Musim⌄</button></section>
     <RegionBreadcrumb district={selectedDistrict?.name ?? "all"} village={selectedVillage?.name ?? "all"} />
     {unavailable ? <section className="card">Belum dipantau — belum tersedia data terverifikasi untuk wilayah ini.</section> : selectedSeason && month && <>
-      <SeasonCalendar title={selectedSeason.name} months={months} active={safeMonth} onSelect={index => setSnapshot(`${seasonId}:${months[index].key}`)} />
+      <SeasonCalendar title={selectedSeason.name} months={months} active={safeMonth} updatedAt={updatedAt} onSelect={index => setSnapshot(`${seasonId}:${months[index].key}`)} />
       <section className="season-analytics-grid">
         <SeasonSummaryCards title={selectedSeason.name} month={month} scale={scale} scope={scope} production={scopeKpis?.aggregate.gkg_production_ton ?? 0} rice={scopeKpis?.estimated_rice_ton ?? 0} seasonId={selectedSeason.id} regionId={scopeKey} />
         <SeasonProgressChart months={months} active={safeMonth} title={selectedSeason.name} seasonId={seasonId} scale={scale} />

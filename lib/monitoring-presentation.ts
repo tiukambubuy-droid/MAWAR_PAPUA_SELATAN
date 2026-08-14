@@ -21,5 +21,7 @@ const STATUS:Record<string,string>={
  "Banjir/genangan":"Banjir/genangan","Ketersediaan air":"Ketersediaan air","Hama dan penyakit":"Hama dan penyakit",Kekeringan:"Kekeringan","Gangguan produksi":"Gangguan produksi",
 };
 export function formatMonitoringStatus(value:unknown){return typeof value==="string"&&value.trim()?(STATUS[value.trim()]??"Belum tersedia"):"Belum tersedia"}
+const SOURCE_TYPE:Record<string,string>={government_prototype:"Prototipe pemerintah",prototype:"Prototipe"};
+export function formatMonitoringSourceType(value:unknown){return typeof value==="string"&&value.trim()?(SOURCE_TYPE[value.trim()]??"Belum tersedia"):"Belum tersedia"}
 export function formatMonitoringSources(values:readonly unknown[]){const seen=new Set<string>(),sources:string[]=[];for(const value of values)if(typeof value==="string")for(const part of value.split(";")){const source=part.trim();if(source&&!seen.has(source)){seen.add(source);sources.push(source)}}return sources.length?sources.join("; "):"Belum tersedia"}
 export function formatMonitoringPercent(value:unknown){return typeof value==="number"&&Number.isFinite(value)?`${value.toLocaleString("id-ID",{maximumFractionDigits:1})}%`:"Belum tersedia"}
