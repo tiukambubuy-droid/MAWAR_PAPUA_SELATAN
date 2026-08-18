@@ -2,6 +2,8 @@
 @media(max-width:1250px){.executive-secondary{grid-template-columns:1fr 1fr 1.4fr}.system-summary{grid-column:2/4}.executive-kpis{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:900px){.executive-primary{grid-template-columns:1fr}.executive-secondary{grid-template-columns:1fr 1fr}.system-summary{grid-column:auto}.executive-filters{grid-template-columns:1fr 1fr}.executive-alerts>div:last-child{grid-template-columns:1fr 1fr}.executive-kpis{grid-template-columns:1fr 1fr}}
 @media(max-width:620px){.executive-heading{align-items:flex-start;gap:12px;flex-direction:column}.executive-filters,.executive-kpis,.executive-secondary,.executive-alerts>div:last-child{grid-template-columns:1fr}.executive-season{border-left:0;padding-left:0}.executive-map-stage{height:360px}.map-stat{width:145px}.executive-map-stage svg{width:82%;opacity:.85}.executive-chart svg{height:240px}.chart-tooltip{right:12px}.system-summary{grid-column:auto}}
+.executive-heading>button.report-unavailable:disabled{background:#e7eeea;color:#49645a;border:1px solid #cbd9d2;box-shadow:none;opacity:1;cursor:not-allowed;font-size:12px;line-height:1.35;min-height:40px}
+@media(max-width:620px),(pointer:coarse){.executive-heading>button.report-unavailable:disabled{min-height:44px}}
 
 /* Ringkasan: geometri administrasi yang sama dengan halaman Peta Lahan (BIG). */
 .executive-map-stage svg{width:68%;height:92%}

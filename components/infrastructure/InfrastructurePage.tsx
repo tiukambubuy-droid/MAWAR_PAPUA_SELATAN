@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { Droplets, MapPinOff, Tractor, Wrench, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, Droplets, MapPinOff, Tractor, Wrench, X } from "lucide-react";
 import { useDashboardFilters } from "@/components/DashboardFilterProvider";
 import { useAccessibleModal } from "@/components/ui/useAccessibleModal";
 import { getRegionById, regions } from "@/lib/data-foundation";
@@ -24,7 +24,8 @@ const conditionLabel = (value: IrrigationCondition) => value === "good" ? "Baik"
 
 function SortHeader<K extends string>({ label, field, active, direction, onSort }: { label:string; field:K; active:K; direction:SortDirection; onSort:(field:K)=>void }) {
   const ariaSort = active === field ? (direction === "asc" ? "ascending" : "descending") : "none";
-  return <th aria-sort={ariaSort}><button className="table-sort" onClick={() => onSort(field)}>{label}<span aria-hidden="true">{active === field ? direction === "asc" ? "↑" : "↓" : "↕"}</span></button></th>;
+  const SortIcon = active !== field ? ArrowUpDown : direction === "asc" ? ArrowUp : ArrowDown;
+  return <th aria-sort={ariaSort}><button className="table-sort" onClick={() => onSort(field)}>{label}<SortIcon size={14} aria-hidden="true"/></button></th>;
 }
 
 function Pagination({ page, totalPages, start, end, total, onPage }: { page:number; totalPages:number; start:number; end:number; total:number; onPage:(page:number)=>void }) {

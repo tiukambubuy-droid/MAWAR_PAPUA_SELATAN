@@ -2,6 +2,7 @@ import { phasePalette } from "@/lib/season-aggregations";
 import { formatNumber, formatPercent } from "@/lib/season-formatters";
 import type { PlantingPhase } from "@/types/planting-season";
 import { getDominantPhase } from "@/lib/presentation-selectors";
+import { CircleHelp, Clock3, Info, Sprout, Star } from "lucide-react";
 
 export function PhaseCompositionChart({ values, total, label, validation }: {
   values: { phase: PlantingPhase; value: number }[];
@@ -41,20 +42,20 @@ export function PhaseCompositionChart({ values, total, label, validation }: {
             <strong>{formatNumber(item.area)}</strong>
           </div>)}
         </div>
-        <div className="phase-data-note"><span>♧</span> Data diperbarui 1 jam yang lalu · Validasi {validation}% <b aria-hidden="true">ⓘ</b></div>
+        <div className="phase-data-note"><span><Clock3 size={15} aria-hidden="true"/></span> Data diperbarui 1 jam yang lalu · Validasi {validation}% <b><Info size={15} aria-hidden="true"/></b></div>
       </section>
 
       <aside className="phase-insight-panel" aria-label="Insight komposisi fase">
         <div className="phase-insight">
-          <i className="dominant" aria-hidden="true">★</i>
+          <i className="dominant"><Star size={18} aria-hidden="true"/></i>
           <div><span>FASE DOMINAN</span><strong>{dominant.phase}</strong><small>{formatNumber(dominant.area)} ha · {formatPercent(dominant.value)}</small></div>
         </div>
         <div className="phase-insight">
-          <i className="harvest" aria-hidden="true">♨</i>
+          <i className="harvest"><Sprout size={18} aria-hidden="true"/></i>
           <div><span>MENUJU PANEN</span><strong>{formatNumber(harvestArea)} ha</strong><small>{formatPercent(harvestPercent)} dari luas dipantau</small></div>
         </div>
         <div className="phase-insight">
-          <i className="change" aria-hidden="true">ⓘ</i>
+          <i className="change"><CircleHelp size={18} aria-hidden="true"/></i>
           <div><span>PERBANDINGAN BULANAN</span><strong>Data pembanding komposisi bulan sebelumnya belum tersedia pada data prototipe.</strong><small>Komposisi yang tampil merupakan data terbaru musim aktif.</small></div>
         </div>
       </aside>

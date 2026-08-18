@@ -4,10 +4,9 @@ import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   AlertTriangle, CalendarDays, CheckCircle2, ChevronRight,
-  Download, Gauge, LandPlot, MapPin, PackageCheck, Sprout,
+  FileClock, Gauge, LandPlot, MapPin, PackageCheck, Sprout,
   Target, Tractor, TrendingUp, Wheat, X,
 } from "lucide-react";
-import { mawarReportSlug, printWithMawarTitle } from "@/lib/report-branding";
 import { aggregateProduction, recordsForScope } from "@/lib/production-data";
 import {
   aggregateRegion,
@@ -100,7 +99,7 @@ export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: 
           <p>Papua Selatan</p>
           <span className="prototype-scope">Cakupan prototipe: Kabupaten Merauke</span>
         </div>
-        <button onClick={() => printWithMawarTitle(mawarReportSlug("produksi", "Kabupaten Merauke", currentSeason?.display_name))}><Download size={17}/> Unduh Laporan</button>
+        <button className="report-unavailable" disabled aria-disabled="true" aria-label="Laporan belum tersedia"><FileClock size={17} aria-hidden="true"/> Laporan belum tersedia</button>
       </section>
 
       <section className="card executive-filters" aria-label="Filter global dashboard">

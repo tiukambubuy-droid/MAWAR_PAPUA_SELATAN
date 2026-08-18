@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
-import { BarChart3, ChevronDown, CloudSun, FileText, LayoutDashboard, Map, Network, Search, ShieldCheck, Sprout, Wrench, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, BarChart3, ChevronDown, CloudSun, FileText, LayoutDashboard, Map, Network, RotateCcw, Search, ShieldCheck, Sprout, TrendingUp, Wrench, X } from "lucide-react";
 import SeasonCommandCenter from "@/components/season/SeasonPage";
 import ProductionCommandCenter from "@/components/production/ProductionPage";
 import ExecutiveDashboard from "@/components/overview/ExecutiveDashboard";
@@ -408,7 +408,7 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
             <section className="focused-map-card">
               <header>
                 <div><span>PETA DISTRIK</span><strong>{focusedDistrict.name}</strong></div>
-                <button onClick={() => { setSelectedName(""); resetZoom(); }}>← Semua distrik</button>
+                <button onClick={() => { setSelectedName(""); resetZoom(); }}><ArrowLeft size={15} aria-hidden="true"/> Semua distrik</button>
               </header>
               <div className="focused-map-stage">
                 {zoomControls}
@@ -816,7 +816,7 @@ function LandPage() {
           {(["Luas Tanam", "Fase Tanam", "Tingkat Risiko"] as LandLayer[]).map(item => <button key={item} className={layer === item ? "on" : ""} onClick={() => { setLayer(item); setTablePage(1); setCategoryFilter("Semua"); setMinimumFilter("Semua"); setDetailRow(null); }}>{item}</button>)}
         </div>
         <div className={`search-box ${searchOpen && search.trim() ? "is-open" : ""}`}>
-          <span aria-hidden="true">⌕</span>
+          <span aria-hidden="true"><Search size={16}/></span>
           <input
             value={search}
             onFocus={() => setSearchOpen(true)}
@@ -833,13 +833,13 @@ function LandPage() {
             aria-expanded={searchOpen && Boolean(search.trim())}
             aria-controls="land-search-results"
           />
-          {search && <button className="search-clear" aria-label="Hapus pencarian" onMouseDown={event => event.preventDefault()} onClick={() => { setSearch(""); setSearchOpen(false); setTablePage(1); }}>×</button>}
+          {search && <button className="search-clear" aria-label="Hapus pencarian" onMouseDown={event => event.preventDefault()} onClick={() => { setSearch(""); setSearchOpen(false); setTablePage(1); }}><X size={15} aria-hidden="true"/></button>}
           {searchOpen && search.trim() && <div id="land-search-results" className="search-results" role="listbox">
             <div className="search-results-head"><strong>HASIL PENCARIAN</strong><span>{searchMatches.length} ditemukan</span></div>
             {searchMatches.length ? searchMatches.map(row => (
               <button key={row.cells[0]} role="option" aria-selected="false" onMouseDown={event => event.preventDefault()} onClick={() => openSearchResult(row)}>
                 <span><strong>{row.cells[0]}</strong><small>{entityLabel} · {row.cells[row.statusIndex]}</small></span>
-                <em>Lihat detail →</em>
+                <em>Lihat detail <ArrowRight size={13} aria-hidden="true"/></em>
               </button>
             )) : <div className="search-empty"><strong>Data tidak ditemukan</strong><small>Periksa penulisan atau coba kata lain.</small></div>}
           </div>}
@@ -879,7 +879,7 @@ function LandPage() {
         </article>
         <aside className="land-insight">
           {layer === "Luas Tanam" ? <>
-          <article className="card mini-stat"><span>LUAS LAHAN TERPETAKAN</span><small className="insight-scope">{insightModel.scope}</small><strong>{insightModel.mapped} <small>ha</small></strong><em>↑ {insightModel.verified}% telah diverifikasi</em></article>
+          <article className="card mini-stat"><span>LUAS LAHAN TERPETAKAN</span><small className="insight-scope">{insightModel.scope}</small><strong>{insightModel.mapped} <small>ha</small></strong><em><TrendingUp size={13} aria-hidden="true"/> {insightModel.verified}% telah diverifikasi</em></article>
           <article className="card mini-stat"><span>TARGET LUAS TANAM {filters.seasonId === "MT1-2026" ? "MT I" : "MT II"}</span><small className="insight-scope">{insightModel.scope}</small><strong>{insightModel.target.toLocaleString("id-ID")} <small>ha</small></strong><em>Realisasi {insightModel.realized.toLocaleString("id-ID")} ha · capaian {insightModel.achievement?.toLocaleString("id-ID", { maximumFractionDigits: 1 }) ?? "Belum tersedia"}%</em></article>
           <article className="card condition-card"><div className="card-title"><div>{mappedLandRiskDefinition.label.toUpperCase()}</div><span>{insightModel.scope}</span></div><p className="card-copy">{mappedLandRiskDefinition.description} Cakupan saat ini {insightModel.risk.total.toLocaleString("id-ID")} ha.</p><div>{insightModel.risk.monitored ? riskLevels.map(label => { const item = insightModel.risk.items.find(entry => entry.label === label); const area = item?.area ?? 0; const percentage = insightModel.risk.total ? area / insightModel.risk.total * 100 : 0; return <div className="composition-row" key={label}><span>{label} <b>{area.toLocaleString("id-ID")} ha · {percentage.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%</b></span><i><em style={{width:`${percentage}%`,background:riskColors[label]}} /></i></div>; }) : <span>{insightModel.risk.level}</span>}</div></article>
           </> : layer === "Fase Tanam" ? <>
@@ -899,7 +899,7 @@ function LandPage() {
           <div className="filter-heading"><strong>FILTER DATA {entityLabel.toUpperCase()}</strong><small>Pilih kategori untuk menyaring daftar {entityLabel.toLowerCase()}</small></div>
           <label><span>{layer === "Luas Tanam" ? "Status kondisi" : layer === "Fase Tanam" ? "Fase dominan" : "Tingkat risiko"}</span><select value={categoryFilter} onChange={event => { setCategoryFilter(event.target.value); setTablePage(1); }}><option>Semua</option>{categoryOptions.map(option => <option key={option}>{option}</option>)}</select></label>
           <label><span>{layer === "Tingkat Risiko" ? "Skor minimum" : "Validasi minimum"}</span><select value={minimumFilter} onChange={event => { setMinimumFilter(event.target.value); setTablePage(1); }}><option>Semua</option><option value="70">≥ 70%</option><option value="80">≥ 80%</option><option value="90">≥ 90%</option></select></label>
-          <button className="reset-filter" disabled={!filterActive} onClick={() => { setSearch(""); setCategoryFilter("Semua"); setMinimumFilter("Semua"); setTablePage(1); }}>↺ Reset filter</button>
+          <button className="reset-filter" disabled={!filterActive} onClick={() => { setSearch(""); setCategoryFilter("Semua"); setMinimumFilter("Semua"); setTablePage(1); }}><RotateCcw size={14} aria-hidden="true"/> Reset filter</button>
         </div>
         <div className="table-scroll"><table><thead><tr>{tableModel.headers.map(header => <th key={header}>{header}</th>)}<th>Detail</th></tr></thead><tbody>{!visibleRows.length && <tr><td colSpan={tableModel.headers.length + 1}>Tidak ada data sesuai filter.<small>Ubah pencarian atau filter untuk melihat data lainnya.</small></td></tr>}{visibleRows.map((row, rowIndex) => <tr key={`${row.cells[0]}-${rowIndex}`}>{row.cells.map((cell,i) => {
           const indicatorColor = layer === "Fase Tanam" ? phaseColors[cell] : layer === "Tingkat Risiko" ? riskColors[cell] : undefined;
@@ -910,14 +910,14 @@ function LandPage() {
           {totalModel.map(item => <div key={item[0]}><span>{item[0]}</span><b>{item[1]}</b></div>)}
         </div>
         {!filterActive && totalPages > 1 && <div className="table-pagination">
-          <button disabled={tablePage === 1} aria-disabled={tablePage === 1} aria-label="Halaman sebelumnya" onClick={() => setTablePage(page => Math.max(1, page - 1))}>← Sebelumnya</button>
+          <button disabled={tablePage === 1} aria-disabled={tablePage === 1} aria-label="Halaman sebelumnya" onClick={() => setTablePage(page => Math.max(1, page - 1))}><ArrowLeft size={14} aria-hidden="true"/> Sebelumnya</button>
           <span>Halaman <strong>{tablePage}</strong> dari {totalPages}</span>
-          <button disabled={tablePage === totalPages} aria-disabled={tablePage === totalPages} aria-label="Halaman berikutnya" onClick={() => setTablePage(page => Math.min(totalPages, page + 1))}>Lihat selanjutnya →</button>
+          <button disabled={tablePage === totalPages} aria-disabled={tablePage === totalPages} aria-label="Halaman berikutnya" onClick={() => setTablePage(page => Math.min(totalPages, page + 1))}>Lihat selanjutnya <ArrowRight size={14} aria-hidden="true"/></button>
         </div>}
       </article>
       {detailRow && detailModel && createPortal(<div className="detail-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setDetailRow(null); }}>
         <section className="detail-modal" role="dialog" aria-modal="true" aria-labelledby="detail-modal-title">
-          <header><div><span>{detailModel.eyebrow}</span><h2 id="detail-modal-title">{detailModel.name}</h2><small>{mapContext.selectedName ? `Distrik ${mapContext.selectedName}` : "Kabupaten Merauke"} · Data simulasi</small></div><button aria-label="Tutup detail" onClick={() => setDetailRow(null)}>×</button></header>
+          <header><div><span>{detailModel.eyebrow}</span><h2 id="detail-modal-title">{detailModel.name}</h2><small>{mapContext.selectedName ? `Distrik ${mapContext.selectedName}` : "Kabupaten Merauke"} · Data simulasi</small></div><button aria-label="Tutup detail" onClick={() => setDetailRow(null)}><X size={18} aria-hidden="true"/></button></header>
           <div className="detail-modal-body">
             <div className="detail-status-strip"><span>Status terpantau</span><strong style={{ color: detailModel.color, background: `${detailModel.color}18`, borderColor: `${detailModel.color}55` }}>{detailModel.status}</strong></div>
             <div className="detail-metrics">{tableModel.headers.map((header, index) => <div key={header}><span>{header}</span><b>{detailRow.cells[index]}</b></div>)}</div>
@@ -1011,13 +1011,13 @@ function HomeContent() {
               key={label}
               className={activeNav === label ? "nav-item active" : "nav-item"}
               onClick={() => { if (enabled) navigate(label); }}
-              aria-label={label === "Infrastruktur & Sarana" ? "Buka halaman Infrastruktur dan Sarana" : label === "Risiko & Iklim" ? "Buka halaman Risiko dan Iklim" : `Buka halaman ${label}`}
+              aria-label={!enabled ? `${label} belum tersedia` : label === "Infrastruktur & Sarana" ? "Buka halaman Infrastruktur dan Sarana" : label === "Risiko & Iklim" ? "Buka halaman Risiko dan Iklim" : `Buka halaman ${label}`}
               aria-current={activeNav === label ? "page" : undefined}
               aria-disabled={!enabled}
               disabled={!enabled}
             >
               <span aria-hidden="true"><Icon size={21} /></span>
-              <span>{label}</span>
+              <span className="nav-copy">{label}{!enabled && <small>Segera hadir</small>}</span>
             </button>
           ))}
         </nav>
@@ -1042,7 +1042,7 @@ function HomeContent() {
             <i />
             <div><span>SUMBER DATA</span><strong>Sumber data lintas perangkat daerah</strong></div>
             <b aria-label="Kualitas data: Tinggi">Kualitas data: Tinggi</b>
-            <button className="profile" aria-label="Menu profil">SD</button>
+            <div className="profile" aria-label="Tampilan prototipe Sekretariat Daerah"><span aria-hidden="true">SD</span></div>
           </div>
         </header>
 

@@ -3,13 +3,14 @@ import { useState } from "react";
 import { createPortal } from "react-dom";
 import type { PlantingSeason } from "@/types/planting-season";
 import { useAccessibleModal } from "@/components/ui/useAccessibleModal";
+import { X } from "lucide-react";
 
 export function ManageSeasonModal({ onClose, onAdd }: { onClose: () => void; onAdd: (season: PlantingSeason) => void }) {
   useAccessibleModal(onClose);
   const [name, setName] = useState("MT V 2026");
   const [start, setStart] = useState("2026-12-01");
   const [end, setEnd] = useState("2027-04-30");
-  return createPortal(<div className="detail-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="manage-season-title" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><section className="manage-season-modal"><header><div><span>PERENCANAAN MUSIM TANAM</span><h2 id="manage-season-title">Kelola Musim</h2><small>Tambah musim tanpa batas urutan dan boleh melewati tahun.</small></div><button aria-label="Tutup kelola musim" onClick={onClose}>×</button></header><div className="manage-form">
+  return createPortal(<div className="detail-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="manage-season-title" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><section className="manage-season-modal"><header><div><span>PERENCANAAN MUSIM TANAM</span><h2 id="manage-season-title">Kelola Musim</h2><small>Tambah musim tanpa batas urutan dan boleh melewati tahun.</small></div><button aria-label="Tutup kelola musim" onClick={onClose}><X size={18} aria-hidden="true"/></button></header><div className="manage-form">
     <label>Nama musim<input value={name} onChange={e => setName(e.target.value)} /></label>
     <label>Tahun / label periode<input value="2026/2027" readOnly /></label>
     <label>Nomor urutan<input type="number" defaultValue={5} min={1} /></label>

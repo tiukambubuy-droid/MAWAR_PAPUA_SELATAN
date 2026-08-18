@@ -18,6 +18,7 @@ import { SeasonInsights } from "./SeasonInsights";
 import { SeasonMonitoringTable } from "./SeasonMonitoringTable";
 import { SeasonProgressChart } from "./SeasonProgressChart";
 import { SeasonSummaryCards } from "./SeasonSummaryCards";
+import { ChevronDown, MapPin, Settings, Wheat } from "lucide-react";
 
 export default function SeasonPage() {
   const [seasons, setSeasons] = useState<PlantingSeason[]>(initialSeasons);
@@ -77,7 +78,7 @@ export default function SeasonPage() {
 
   return <div className="season-command page-enter">
     <section className="season-heading"><div><h1>MUSIM TANAM</h1><p>Pemantauan musim tanam padi Papua Selatan</p><span className="prototype-scope">Cakupan data aktif: Kabupaten Merauke</span></div><span className="demo-badge"><i className="pulse" /> Data simulasi aktif</span></section>
-    <section className="card season-command-bar"><SeasonFilters years={years} year={year} onYear={changeYear} seasons={yearSeasons} seasonId={seasonId} onSeason={value => { setSeason(value); setDetail(null); }} /><RegionFilters districts={districts} villages={villages} districtId={districtId} villageId={villageId} onDistrict={value => { setDistrict(value); setDetail(null); }} onVillage={value => { setVillage(value); setDetail(null); }} /><div className="season-context"><span>♨</span><div><small>Komoditas</small><strong>Padi</strong></div></div><div className="season-context"><span>●</span><div><small>Wilayah Aktif</small><strong>{scope}</strong></div></div><button className="manage-season" onClick={() => setManageOpen(true)}>⚙ Kelola Musim⌄</button></section>
+    <section className="card season-command-bar"><SeasonFilters years={years} year={year} onYear={changeYear} seasons={yearSeasons} seasonId={seasonId} onSeason={value => { setSeason(value); setDetail(null); }} /><RegionFilters districts={districts} villages={villages} districtId={districtId} villageId={villageId} onDistrict={value => { setDistrict(value); setDetail(null); }} onVillage={value => { setVillage(value); setDetail(null); }} /><div className="season-context"><span><Wheat size={18} aria-hidden="true"/></span><div><small>Komoditas</small><strong>Padi</strong></div></div><div className="season-context"><span><MapPin size={18} aria-hidden="true"/></span><div><small>Wilayah Aktif</small><strong>{scope}</strong></div></div><button className="manage-season" onClick={() => setManageOpen(true)}><Settings size={16} aria-hidden="true"/> Kelola Musim <ChevronDown size={15} aria-hidden="true"/></button></section>
     <RegionBreadcrumb district={selectedDistrict?.name ?? "all"} village={selectedVillage?.name ?? "all"} />
     {unavailable ? <section className="card">Belum dipantau — belum tersedia data terverifikasi untuk wilayah ini.</section> : selectedSeason && month && <>
       <SeasonCalendar title={selectedSeason.name} months={months} active={safeMonth} updatedAt={updatedAt} onSelect={index => setSnapshot(`${seasonId}:${months[index].key}`)} />

@@ -306,6 +306,14 @@ footer{display:flex;justify-content:space-between;gap:20px;padding:13px 2px 0;fo
 }
 @media (max-width: 620px) {.season-heading h1{font-size:22px}.season-command-bar{grid-template-columns:1fr}.season-filter-pair,.season-filter-pair.three{grid-template-columns:1fr}.season-context{width:100%}.season-kpi-grid{grid-template-columns:1fr 1fr}.phase-composition-layout{grid-template-columns:1fr;padding:12px}.phase-chart-panel{padding:2px 0 15px}.phase-donut-large{width:190px;height:190px}.phase-legend-panel{padding:13px 4px 0;border-top:1px solid #e7ede9}.phase-table-head,.phase-list>div{grid-template-columns:minmax(115px,1fr) minmax(95px,.8fr) 58px;gap:7px}.phase-insight-panel{grid-template-columns:1fr;padding-top:8px}.phase-insight{border-right:0;border-bottom:1px solid #e7ede9;padding:3px 4px}.phase-insight:last-child{border-bottom:0}.manage-form{grid-template-columns:1fr}.season-table-tools{flex-direction:column}.season-table-tools input,.season-table-tools select{width:100%}}
 @media print {.sidebar,.topbar,.filters,.download,.profile{display:none!important}.workspace{margin:0}.content{padding:12px}.map-stage{height:330px}}
+
+/* Honest unavailable states and non-interactive identity badge. */
+.nav-item[aria-disabled="true"]{opacity:.76;cursor:not-allowed}
+.nav-copy{display:flex;flex-direction:column;gap:2px}
+.nav-copy small{color:#c9d9d2;font-size:9px;font-weight:600}
+.profile{display:grid;place-items:center;cursor:default}
+.reset-filter,.search-results>button em,.mini-stat em,.table-pagination button{align-items:center}
+.reset-filter,.mini-stat em,.table-pagination button,.search-results>button em{gap:5px}
 @media (prefers-reduced-motion: reduce) {*{animation:none!important;transition:none!important}}
 
 /* TASK 006: shared map and monitoring-chart presentation primitives. */

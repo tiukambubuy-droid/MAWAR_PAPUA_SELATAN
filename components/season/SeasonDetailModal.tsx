@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useRef } from "react";
 import { phasePalette } from "@/lib/season-aggregations";
 import { useAccessibleModal } from "@/components/ui/useAccessibleModal";
+import { X } from "lucide-react";
 import type { MonitoringRow } from "@/types/planting-season";
 
 export function SeasonDetailModal({ row, onClose }: { row: MonitoringRow; onClose: () => void }) {
@@ -12,7 +13,7 @@ export function SeasonDetailModal({ row, onClose }: { row: MonitoringRow; onClos
   return createPortal(
     <div className="detail-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
       <section ref={dialogRef} className="detail-modal" role="dialog" aria-modal="true" aria-labelledby="season-detail-title" tabIndex={-1}>
-        <header><div><span>DETAIL PEMANTAUAN MUSIM TANAM</span><h2 id="season-detail-title">{row.name}</h2><small>Data demonstrasi · diperbarui {row.updatedAt}</small></div><button aria-label="Tutup detail pemantauan" onClick={onClose}>×</button></header>
+        <header><div><span>DETAIL PEMANTAUAN MUSIM TANAM</span><h2 id="season-detail-title">{row.name}</h2><small>Data demonstrasi · diperbarui {row.updatedAt}</small></div><button aria-label="Tutup detail pemantauan" onClick={onClose}><X size={18} aria-hidden="true"/></button></header>
         <div className="detail-modal-body">
           <div className="detail-status-strip"><span>Fase dominan</span><strong style={{ color: phasePalette[row.phase], borderColor: phasePalette[row.phase], background: `${phasePalette[row.phase]}18` }}>{row.phase}</strong></div>
           <div className="detail-metrics">

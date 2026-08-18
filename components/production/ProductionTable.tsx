@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Eye } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye } from "lucide-react";
 import type { ProductionRecord } from "@/types/production";
 
 export function ProductionTable({
@@ -116,7 +116,7 @@ export function ProductionTable({
           {Math.min(page * 6, filtered.length)} dari {filtered.length} data
         </span>
         {filtered.length > 0 && <div>
-          <button disabled={page === 1} aria-disabled={page === 1} aria-label="Halaman sebelumnya" onClick={() => setPage((current) => current - 1)}>‹</button>
+          <button disabled={page === 1} aria-disabled={page === 1} aria-label="Halaman sebelumnya" onClick={() => setPage((current) => current - 1)}><ChevronLeft size={16} aria-hidden="true"/></button>
           {Array.from({ length: pages }, (_, index) => (
             <button
               className={page === index + 1 ? "active" : ""}
@@ -128,7 +128,7 @@ export function ProductionTable({
               {index + 1}
             </button>
           ))}
-          <button disabled={page === pages} aria-disabled={page === pages} aria-label="Halaman berikutnya" onClick={() => setPage((current) => current + 1)}>›</button>
+          <button disabled={page === pages} aria-disabled={page === pages} aria-label="Halaman berikutnya" onClick={() => setPage((current) => current + 1)}><ChevronRight size={16} aria-hidden="true"/></button>
         </div>}
       </div>
     </article>
