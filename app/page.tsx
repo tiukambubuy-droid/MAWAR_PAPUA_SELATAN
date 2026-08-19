@@ -28,6 +28,9 @@ import { defineLandMetric, formatPresentationValue, getValidationSummary, resolv
 import { clampPan, clampZoom, fitToBounds, isMapDrag, prioritizedMapLabels, resetMapCamera } from "@/lib/visualization";
 import { districtMonitoringCoverage } from "@/lib/public-presentation";
 import { createMapRegionOptions, districtIdForMapRegion, filterMapRegionOptions, formatMapRegionLabel, REGION_SEPARATOR } from "@/lib/map-region-search";
+import { getLandRecordsForRegion } from "@/lib/land-monitoring";
+import { formatMonitoringTimestamp, latestMonitoringTimestamp } from "@/lib/monitoring-presentation";
+import { useAccessibleModal } from "@/components/ui/useAccessibleModal";
 
 const activeRegionCounts = getActiveMonitoringRegionCounts();
 const canonicalDistrictNames = regions
@@ -117,25 +120,27 @@ function layerColor(layer: LandLayer, name: string, seasonId: string) {
 
 function makeDistrictSummary(name: string, seasonId = "MT2-2026") {
   const region = getRegionByName(name, "district");
+  const monitored = region?.monitoring_status === "active";
   const aggregate = aggregateRegion(region?.id ?? "unknown", seasonId);
   const target = aggregate.gkg_production_target_ton
     ? aggregate.gkg_production_ton / aggregate.gkg_production_target_ton * 100
     : 0;
   return {
     district: name,
-    harvest: Math.round(aggregate.harvested_area_ha).toLocaleString("id-ID"),
-    gkg: Math.round(aggregate.gkg_production_ton).toLocaleString("id-ID"),
-    yield: (aggregate.harvested_area_ha ? aggregate.gkg_production_ton / aggregate.harvested_area_ha : 0).toLocaleString("id-ID", { maximumFractionDigits: 2 }),
-    rice: Math.round(aggregate.gkg_production_ton * 0.6339).toLocaleString("id-ID"),
-    target: Math.round(target),
-    land: Math.round(aggregate.mapped_land_ha).toLocaleString("id-ID"),
-    planted: Math.round(aggregate.planting_realization_ha).toLocaleString("id-ID"),
-    landMetric: defineLandMetric("mapped_land", aggregate.mapped_land_ha),
-    plantedMetric: defineLandMetric("realized_planted_area", aggregate.planting_realization_ha),
-    harvestedMetric: defineLandMetric("harvested_area", aggregate.harvested_area_ha),
-    villages: districtVillageCount(name),
-    condition: region?.monitoring_status !== "active" ? "Belum dipantau" : target >= 85 ? "Baik" : target >= 70 ? "Waspada" : "Perlu verifikasi",
-    updated: seasonId === "MT2-2026" ? "24 Juli 2026" : "31 Maret 2026",
+    monitored,
+    harvest: monitored ? Math.round(aggregate.harvested_area_ha).toLocaleString("id-ID") : "Belum dipantau",
+    gkg: monitored ? Math.round(aggregate.gkg_production_ton).toLocaleString("id-ID") : "Belum dipantau",
+    yield: monitored ? (aggregate.harvested_area_ha ? aggregate.gkg_production_ton / aggregate.harvested_area_ha : 0).toLocaleString("id-ID", { maximumFractionDigits: 2 }) : "Belum dipantau",
+    rice: monitored ? Math.round(aggregate.gkg_production_ton * 0.6339).toLocaleString("id-ID") : "Belum dipantau",
+    target: monitored ? Math.round(target) : null,
+    land: monitored ? Math.round(aggregate.mapped_land_ha).toLocaleString("id-ID") : "Belum dipantau",
+    planted: monitored ? Math.round(aggregate.planting_realization_ha).toLocaleString("id-ID") : "Belum dipantau",
+    landMetric: defineLandMetric("mapped_land", monitored ? aggregate.mapped_land_ha : null, monitored ? undefined : "not_monitored"),
+    plantedMetric: defineLandMetric("realized_planted_area", monitored ? aggregate.planting_realization_ha : null, monitored ? undefined : "not_monitored"),
+    harvestedMetric: defineLandMetric("harvested_area", monitored ? aggregate.harvested_area_ha : null, monitored ? undefined : "not_monitored"),
+    villages: monitored ? districtVillageCount(name) : null,
+    condition: !monitored ? "Belum dipantau" : target >= 85 ? "Baik" : target >= 70 ? "Waspada" : "Perlu verifikasi",
+    updated: monitored && region ? formatMonitoringTimestamp(latestMonitoringTimestamp(getLandRecordsForRegion(region.id, seasonId).map(record => record.updated_at))) : "Belum tersedia",
   };
 }
 
@@ -147,10 +152,10 @@ function makeDistrictRows(names: string[], seasonId = "MT2-2026"): LandTableRow[
     return {
       cells: [
         name,
-        `${summary.villages} kampung`,
-        `${summary.planted} ha`,
-        `${summary.harvest} ha`,
-        `${summary.gkg} ton`,
+        summary.monitored ? `${summary.villages} kampung` : "Belum dipantau",
+        summary.monitored ? `${summary.planted} ha` : "Belum dipantau",
+        summary.monitored ? `${summary.harvest} ha` : "Belum dipantau",
+        summary.monitored ? `${summary.gkg} ton` : "Belum dipantau",
         summary.condition,
         validation === null ? "Belum dipantau" : `${Math.round(validation)}%`,
       ],
@@ -164,18 +169,19 @@ function makeVillageRows(district: string, seasonId = "MT2-2026"): LandTableRow[
   const districtRegion = getRegionByName(district, "district");
   const children = districtRegion ? getChildrenByRegionId(districtRegion.id) : [];
   return children.map((region) => {
+    const monitored = region.monitoring_status === "active";
     const aggregate = aggregateRegion(region.id, seasonId);
     const validation = Math.round(aggregate.validation_rate);
     const status = validation >= 86 ? "Baik" : validation >= 74 ? "Waspada" : "Verifikasi";
     return {
       cells: [
         region.name,
-        `${aggregate.mapped_land_ha.toLocaleString("id-ID")} ha`,
-        `${aggregate.planting_realization_ha.toLocaleString("id-ID")} ha`,
-        phaseProfile(region.name, seasonId).phase,
-        `${aggregate.gkg_production_ton.toLocaleString("id-ID")} ton`,
-        status,
-        `${validation}%`,
+        monitored ? `${aggregate.mapped_land_ha.toLocaleString("id-ID")} ha` : "Belum dipantau",
+        monitored ? `${aggregate.planting_realization_ha.toLocaleString("id-ID")} ha` : "Belum dipantau",
+        monitored ? phaseProfile(region.name, seasonId).phase : "Belum dipantau",
+        monitored ? `${aggregate.gkg_production_ton.toLocaleString("id-ID")} ton` : "Belum dipantau",
+        monitored ? status : "Belum dipantau",
+        monitored ? `${validation}%` : "Belum dipantau",
       ],
       statusIndex: 5,
       validationIndex: 6,
@@ -435,18 +441,18 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
                 <div className={`district-condition ${districtDummy.condition === "Baik" ? "good" : "watch"}`}>{districtDummy.condition}</div>
               </div>
               <div className="district-data-grid">
-                  <div title={districtDummy.landMetric.description}><span>{districtDummy.landMetric.label}</span><strong>{districtDummy.land}</strong><small>ha</small></div>
-                <div title={districtDummy.plantedMetric.description}><span>{districtDummy.plantedMetric.label}</span><strong>{districtDummy.planted}</strong><small>ha</small></div>
-                <div title={districtDummy.harvestedMetric.description}><span>{districtDummy.harvestedMetric.label}</span><strong>{districtDummy.harvest}</strong><small>ha</small></div>
-                <div><span>Produksi GKG</span><strong>{districtDummy.gkg}</strong><small>ton</small></div>
-                <div><span>Estimasi beras</span><strong>{districtDummy.rice}</strong><small>ton</small></div>
-                <div><span>Produktivitas</span><strong>{districtDummy.yield}</strong><small>ton/ha</small></div>
+                  <div title={districtDummy.landMetric.description}><span>{districtDummy.landMetric.label}</span><strong>{districtDummy.land}</strong>{districtDummy.monitored && <small>ha</small>}</div>
+                <div title={districtDummy.plantedMetric.description}><span>{districtDummy.plantedMetric.label}</span><strong>{districtDummy.planted}</strong>{districtDummy.monitored && <small>ha</small>}</div>
+                <div title={districtDummy.harvestedMetric.description}><span>{districtDummy.harvestedMetric.label}</span><strong>{districtDummy.harvest}</strong>{districtDummy.monitored && <small>ha</small>}</div>
+                <div><span>Produksi GKG</span><strong>{districtDummy.gkg}</strong>{districtDummy.monitored && <small>ton</small>}</div>
+                <div><span>Estimasi beras</span><strong>{districtDummy.rice}</strong>{districtDummy.monitored && <small>ton</small>}</div>
+                <div><span>Produktivitas</span><strong>{districtDummy.yield}</strong>{districtDummy.monitored && <small>ton/ha</small>}</div>
               </div>
               <div className="district-data-summary">
-                <div><span>Kampung terpantau</span><strong>{districtDummy.villages} kampung</strong></div>
-                <div><span>Capaian target</span><strong>{districtDummy.target}%</strong></div>
+                <div><span>Kampung terpantau</span><strong>{districtDummy.monitored ? `${districtDummy.villages} kampung` : "Belum dipantau"}</strong></div>
+                <div><span>Capaian target</span><strong>{districtDummy.target === null ? "Belum dipantau" : `${districtDummy.target}%`}</strong></div>
               </div>
-              <div className="district-progress-bar"><i style={{ width: `${districtDummy.target}%` }} /></div>
+              {districtDummy.target !== null && <div className="district-progress-bar"><i style={{ width: `${districtDummy.target}%` }} /></div>}
               <small className="district-updated">Diperbarui {districtDummy.updated}</small>
               </> : layer === "Fase Tanam" ? <>
                 <div className="district-data-heading">
@@ -458,11 +464,11 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
                   <div><span>Progres fase</span><strong>{formatPresentationValue(selectedPhase.progress, "%")}</strong></div>
                   <div><span>Umur tanaman</span><strong>{formatPresentationValue(selectedPhase.age, "hari")}</strong></div>
                   <div><span>Luas dalam fase</span><strong>{formatPresentationValue(selectedPhase.planted, "ha")}</strong></div>
-                  <div><span>Siap panen</span><strong>{selectedPhase.ready.toLocaleString("id-ID")}</strong><small>ha</small></div>
-                  <div><span>Kampung terpantau</span><strong>{districtDummy.villages}</strong><small>kampung</small></div>
+                  <div><span>Siap panen</span><strong>{selectedPhase.monitored ? selectedPhase.ready.toLocaleString("id-ID") : "Belum dipantau"}</strong>{selectedPhase.monitored && <small>ha</small>}</div>
+                  <div><span>Kampung terpantau</span><strong>{selectedPhase.monitored ? districtDummy.villages : "Belum dipantau"}</strong>{selectedPhase.monitored && <small>kampung</small>}</div>
                 </div>
                 <div className="district-data-summary"><div><span>Mulai tanam</span><strong>{selectedPhase.start}</strong></div><div><span>Estimasi panen</span><strong>{selectedPhase.harvest}</strong></div></div>
-                <div className="district-progress-bar phase-progress"><i style={{ width: `${selectedPhase.progress ?? 0}%`, background: phaseColors[selectedPhase.phase] }} /></div>
+                {selectedPhase.monitored && <div className="district-progress-bar phase-progress"><i style={{ width: `${selectedPhase.progress ?? 0}%`, background: phaseColors[selectedPhase.phase] }} /></div>}
                 <small className="district-updated">Data simulasi fase tanam · {districtDummy.updated}</small>
               </> : <>
                 <div className="district-data-heading">
@@ -474,11 +480,11 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
                   <div><span>Skor risiko</span><strong>{formatPresentationValue(selectedRisk.score)}</strong></div>
                   <div><span>Ancaman dominan</span><strong>{selectedRisk.threat}</strong></div>
                   <div><span>Luas terdampak</span><strong>{formatPresentationValue(selectedRisk.affected, "ha")}</strong></div>
-                  <div><span>Kampung terdampak</span><strong>{selectedRisk.villages}</strong><small>kampung</small></div>
+                  <div><span>Kampung terdampak</span><strong>{selectedRisk.monitored ? selectedRisk.villages : "Belum dipantau"}</strong>{selectedRisk.monitored && <small>kampung</small>}</div>
                   <div><span>Status data</span><strong>{selectedRisk.monitored ? "Terpantau" : "Belum dipantau"}</strong></div>
                 </div>
                 <div className="risk-recommendation"><span>REKOMENDASI</span><strong>{selectedRisk.recommendation}</strong></div>
-                <div className="district-progress-bar"><i style={{ width: `${selectedRisk.percentage ?? 0}%`, background: riskColors[selectedRisk.level] }} /></div>
+                {selectedRisk.monitored && <div className="district-progress-bar"><i style={{ width: `${selectedRisk.percentage ?? 0}%`, background: riskColors[selectedRisk.level] }} /></div>}
                 <small className="district-updated">Data simulasi risiko · {districtDummy.updated}</small>
               </>}
             </aside>
@@ -536,6 +542,55 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
         <em>Peta untuk visualisasi pemantauan, bukan penetapan hukum batas wilayah.</em>
       </div>
     </div>
+  );
+}
+
+type LandDetailModel = {
+  eyebrow: string;
+  name: string;
+  status: string;
+  color: string;
+  description: string;
+  reason: string;
+  recommendation: string;
+  updatedAt: string;
+};
+
+function LandDetailModal({ model, row, headers, scope, onClose }: { model: LandDetailModel; row: LandTableRow; headers: string[]; scope: string; onClose: () => void }) {
+  const dialogRef = useRef<HTMLElement | null>(null);
+  useAccessibleModal(onClose, dialogRef);
+
+  return createPortal(
+    <div className="detail-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+      <section
+        ref={dialogRef}
+        className="detail-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="detail-modal-title"
+        tabIndex={-1}
+        onKeyDown={event => {
+          if (event.key !== "Tab") return;
+          const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])') ?? []);
+          if (!focusable.length) { event.preventDefault(); dialogRef.current?.focus(); return; }
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) { event.preventDefault(); last.focus(); }
+          else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+        }}
+      >
+        <header><div><span>{model.eyebrow}</span><h2 id="detail-modal-title">{model.name}</h2><small>{scope} · Data simulasi</small></div><button aria-label="Tutup detail" onClick={onClose}><X size={18} aria-hidden="true"/></button></header>
+        <div className="detail-modal-body">
+          <div className="detail-status-strip"><span>Status data</span><strong style={{ color: model.color, background: `${model.color}18`, borderColor: `${model.color}55` }}>{model.status}</strong></div>
+          <div className="detail-metrics">{headers.map((header, index) => <div key={header}><span>{header}</span><b style={{ overflowWrap: "anywhere" }}>{row.cells[index]}</b></div>)}</div>
+          <article><span>RINGKASAN KONDISI</span><p>{model.description}</p></article>
+          <article className="detail-reason"><span>ALASAN PENETAPAN STATUS</span><p>{model.reason}</p></article>
+          <article className="detail-recommendation"><span>REKOMENDASI TINDAK LANJUT</span><p>{model.recommendation}</p></article>
+        </div>
+        <footer><small>Diperbarui {model.updatedAt}</small><button onClick={onClose}>Tutup</button></footer>
+      </section>
+    </div>,
+    document.body,
   );
 }
 
@@ -639,7 +694,9 @@ function LandPage() {
     const region = mapContext.selectedName ? getRegionByName(mapContext.selectedName, "district") : getRegionById("93.01");
     const aggregate = aggregateRegion(region?.id ?? "93.01", filters.seasonId);
     const risk = riskProfile(mapContext.selectedName || "Kabupaten Merauke", filters.seasonId, region?.id ?? "93.01");
+    const monitored = region?.monitoring_status === "active";
     return {
+      monitored,
       scope: mapContext.selectedName ? `Distrik ${mapContext.selectedName}` : "Kabupaten Merauke",
       mapped: Math.round(aggregate.mapped_land_ha).toLocaleString("id-ID"),
       target: aggregate.planting_target_ha,
@@ -706,6 +763,7 @@ function LandPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const visibleRows = filterActive ? filtered : filtered.slice((tablePage - 1) * pageSize, tablePage * pageSize);
   const totalModel = useMemo(() => {
+    const hasMonitoredRows = filtered.some(row => /^\d/.test(row.cells[row.validationIndex]));
     const average = (index: number) => filtered.length ? Math.round(filtered.reduce((sum, row) => sum + numericValue(row.cells[index]), 0) / filtered.length) : 0;
     const sum = (index: number) => filtered.reduce((total, row) => total + numericValue(row.cells[index]), 0).toLocaleString("id-ID");
     const validationSummary = getValidationSummary(filtered.map(row => ({
@@ -713,6 +771,12 @@ function LandPage() {
       validation: /^\d/.test(row.cells[row.validationIndex]) ? numericValue(row.cells[row.validationIndex]) : null,
     })));
     const validationValue = validationSummary.averageValidation === null ? "Belum tersedia" : `${validationSummary.averageValidation.toLocaleString("id-ID")}%`;
+    if (!hasMonitoredRows) return [
+      [`${entityLabel} ditampilkan`, `${filtered.length}`],
+      ["Status data", "Belum dipantau"],
+      ["Nilai indikator", "Belum dipantau"],
+      ["Cakupan validasi", validationSummary.calculationScope],
+    ];
     if (layer === "Fase Tanam") return [
       [`${entityLabel} ditampilkan`, `${filtered.length}`],
       ["Luas dalam fase", `${sum(2)} ha`],
@@ -752,6 +816,21 @@ function LandPage() {
     if (!detailRow) return null;
     const name = detailRow.cells[0];
     const status = detailRow.cells[detailRow.statusIndex];
+    const region = getRegionByName(name);
+    const monitored = region?.monitoring_status === "active";
+    const updatedAt = monitored && region
+      ? formatMonitoringTimestamp(latestMonitoringTimestamp(getLandRecordsForRegion(region.id, filters.seasonId).map(record => record.updated_at)))
+      : "Belum tersedia";
+    if (!monitored) return {
+      eyebrow: layer === "Fase Tanam" ? "DETAIL FASE TANAM" : layer === "Tingkat Risiko" ? "DETAIL TINGKAT RISIKO" : "DETAIL KONDISI LAHAN",
+      name,
+      status: "Belum dipantau",
+      color: "#667085",
+      description: `Data monitoring ${name} belum tersedia pada cakupan prototipe musim terpilih.`,
+      reason: "Wilayah ini berstatus Belum dipantau; tidak ada nilai nol, tren, persentase, atau status kondisi yang dibentuk sebagai pengganti data.",
+      recommendation: "Lakukan pendataan dan validasi sumber sebelum menampilkan indikator wilayah.",
+      updatedAt,
+    };
     if (layer === "Fase Tanam") {
       const profile = phaseProfile(name, filters.seasonId);
       return {
@@ -762,6 +841,7 @@ function LandPage() {
         description: `${name} berada pada fase ${status} dengan progres komposisi sebesar ${profile.progress}% dari data monitoring musim terpilih.`,
         reason: `Status berasal dari fase dengan luas terbesar pada record musim dan wilayah aktif, dengan luas dalam fase ${detailRow.cells[2]}.`,
         recommendation: "Lanjutkan validasi record dan pemantauan perkembangan fase.",
+        updatedAt,
       };
     }
     if (layer === "Tingkat Risiko") {
@@ -774,6 +854,7 @@ function LandPage() {
         description: `${name} memiliki tingkat risiko dominan ${status}${profile.percentage === null ? "" : ` sebesar ${profile.percentage.toLocaleString("id-ID")}% dari luas risiko terpantau`} pada data musim terpilih.`,
         reason: "Kategori berasal dari agregasi field risiko pada record monitoring yang terverifikasi.",
         recommendation: profile.recommendation,
+        updatedAt,
       };
     }
     const validation = numericValue(detailRow.cells[detailRow.validationIndex]);
@@ -791,21 +872,9 @@ function LandPage() {
       description: `Pemantauan ${name} mencakup luas lahan, luas tanam, fase pertumbuhan, produksi GKG, dan hasil validasi lapangan.`,
       reason: reasonByStatus[status] ?? `Status ${status} ditetapkan berdasarkan hasil pemantauan dan validasi data lapangan.`,
       recommendation: status === "Baik" || status === "Aktif" ? "Pertahankan pola pemeliharaan dan pembaruan data berkala." : status === "Waspada" ? "Lakukan pemantauan lebih sering dan tindak lanjuti indikator gangguan." : "Lakukan verifikasi lapangan dan perbarui data pendukung.",
+      updatedAt,
     };
   }, [detailRow, filters.seasonId, layer]);
-  useEffect(() => {
-    if (!detailRow) return;
-    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") setDetailRow(null); };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => {
-      window.removeEventListener("keydown", closeOnEscape);
-      document.body.style.overflow = previousOverflow;
-      window.requestAnimationFrame(() => trigger?.focus());
-    };
-  }, [detailRow]);
 
   return (
     <div className="subpage page-enter">
@@ -879,17 +948,17 @@ function LandPage() {
         </article>
         <aside className="land-insight">
           {layer === "Luas Tanam" ? <>
-          <article className="card mini-stat"><span>LUAS LAHAN TERPETAKAN</span><small className="insight-scope">{insightModel.scope}</small><strong>{insightModel.mapped} <small>ha</small></strong><em><TrendingUp size={13} aria-hidden="true"/> {insightModel.verified}% telah diverifikasi</em></article>
-          <article className="card mini-stat"><span>TARGET LUAS TANAM {filters.seasonId === "MT1-2026" ? "MT I" : "MT II"}</span><small className="insight-scope">{insightModel.scope}</small><strong>{insightModel.target.toLocaleString("id-ID")} <small>ha</small></strong><em>Realisasi {insightModel.realized.toLocaleString("id-ID")} ha · capaian {insightModel.achievement?.toLocaleString("id-ID", { maximumFractionDigits: 1 }) ?? "Belum tersedia"}%</em></article>
-          <article className="card condition-card"><div className="card-title"><div>{mappedLandRiskDefinition.label.toUpperCase()}</div><span>{insightModel.scope}</span></div><p className="card-copy">{mappedLandRiskDefinition.description} Cakupan saat ini {insightModel.risk.total.toLocaleString("id-ID")} ha.</p><div>{insightModel.risk.monitored ? riskLevels.map(label => { const item = insightModel.risk.items.find(entry => entry.label === label); const area = item?.area ?? 0; const percentage = insightModel.risk.total ? area / insightModel.risk.total * 100 : 0; return <div className="composition-row" key={label}><span>{label} <b>{area.toLocaleString("id-ID")} ha · {percentage.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%</b></span><i><em style={{width:`${percentage}%`,background:riskColors[label]}} /></i></div>; }) : <span>{insightModel.risk.level}</span>}</div></article>
+          <article className="card mini-stat"><span>LUAS LAHAN TERPETAKAN</span><small className="insight-scope">{insightModel.scope}</small><strong>{insightModel.monitored ? <>{insightModel.mapped} <small>ha</small></> : "Belum dipantau"}</strong><em>{insightModel.monitored ? <><TrendingUp size={13} aria-hidden="true"/> {insightModel.verified}% telah diverifikasi</> : "Data wilayah belum tersedia"}</em></article>
+          <article className="card mini-stat"><span>TARGET LUAS TANAM {filters.seasonId === "MT1-2026" ? "MT I" : "MT II"}</span><small className="insight-scope">{insightModel.scope}</small><strong>{insightModel.monitored ? <>{insightModel.target.toLocaleString("id-ID")} <small>ha</small></> : "Belum dipantau"}</strong><em>{insightModel.monitored ? <>Realisasi {insightModel.realized.toLocaleString("id-ID")} ha · capaian {insightModel.achievement?.toLocaleString("id-ID", { maximumFractionDigits: 1 }) ?? "Belum tersedia"}%</> : "Tidak ada persentase sintetis"}</em></article>
+          <article className="card condition-card"><div className="card-title"><div>{mappedLandRiskDefinition.label.toUpperCase()}</div><span>{insightModel.scope}</span></div><p className="card-copy">{insightModel.monitored ? <>{mappedLandRiskDefinition.description} Cakupan saat ini {insightModel.risk.total.toLocaleString("id-ID")} ha.</> : "Data klasifikasi risiko belum tersedia untuk wilayah yang belum dipantau."}</p><div>{insightModel.risk.monitored ? riskLevels.map(label => { const item = insightModel.risk.items.find(entry => entry.label === label); const area = item?.area ?? 0; const percentage = insightModel.risk.total ? area / insightModel.risk.total * 100 : 0; return <div className="composition-row" key={label}><span>{label} <b>{area.toLocaleString("id-ID")} ha · {percentage.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%</b></span><i><em style={{width:`${percentage}%`,background:riskColors[label]}} /></i></div>; }) : <span>Belum dipantau</span>}</div></article>
           </> : layer === "Fase Tanam" ? <>
             <article className="card mini-stat"><span>FASE TANAM DOMINAN</span><small className="insight-scope">{analyticalInsight.scope}</small><strong className="textual-stat" style={{color:phaseColors[analyticalInsight.phase.phase]}}>{analyticalInsight.phase.phase}</strong><em>{analyticalInsight.phase.progress === null ? "Belum tersedia" : `Progres fase ${analyticalInsight.phase.progress.toLocaleString("id-ID")}%`}</em></article>
-            <article className="card mini-stat"><span>LUAS SIAP PANEN</span><small className="insight-scope">{analyticalInsight.scope}</small><strong>{analyticalInsight.phase.ready.toLocaleString("id-ID")} <small>ha</small></strong><em>Estimasi {analyticalInsight.phase.harvest}</em></article>
-            <article className="card condition-card"><div className="card-title"><div>KOMPOSISI FASE</div><span>{analyticalInsight.scope}</span></div><div>{analyticalInsight.phase.items.map(item => { const percentage = analyticalInsight.phase.total ? (item.area ?? 0) / analyticalInsight.phase.total * 100 : 0; return <div className="composition-row" key={item.id}><span>{item.label} <b>{percentage.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%</b></span><i><em style={{width:`${percentage}%`,background:item.color}} /></i></div>; })}</div></article>
+            <article className="card mini-stat"><span>LUAS SIAP PANEN</span><small className="insight-scope">{analyticalInsight.scope}</small><strong>{analyticalInsight.phase.monitored ? <>{analyticalInsight.phase.ready.toLocaleString("id-ID")} <small>ha</small></> : "Belum dipantau"}</strong><em>{analyticalInsight.phase.monitored ? `Estimasi ${analyticalInsight.phase.harvest}` : "Data wilayah belum tersedia"}</em></article>
+            <article className="card condition-card"><div className="card-title"><div>KOMPOSISI FASE</div><span>{analyticalInsight.scope}</span></div><div>{analyticalInsight.phase.monitored ? analyticalInsight.phase.items.map(item => { const percentage = analyticalInsight.phase.total ? (item.area ?? 0) / analyticalInsight.phase.total * 100 : 0; return <div className="composition-row" key={item.id}><span>{item.label} <b>{percentage.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%</b></span><i><em style={{width:`${percentage}%`,background:item.color}} /></i></div>; }) : <span>Belum dipantau</span>}</div></article>
           </> : <>
             <article className="card mini-stat"><span>LUAS TERDAMPAK RISIKO DOMINAN</span><small className="insight-scope">{analyticalInsight.scope}</small><strong>{formatPresentationValue(analyticalInsight.risk.affected, "ha")}</strong><em>{analyticalInsight.risk.threat}</em></article>
-            <article className="card mini-stat"><span>TINGKAT RISIKO DOMINAN</span><small className="insight-scope">{analyticalInsight.scope}</small><strong className="textual-stat" style={{color:riskColors[analyticalInsight.risk.level]}}>{analyticalInsight.risk.level}</strong><em>{analyticalInsight.risk.villages} wilayah terdampak</em></article>
-            <article className="card condition-card"><div className="card-title"><div>KOMPOSISI RISIKO</div><span>{analyticalInsight.scope}</span></div><div>{analyticalInsight.risk.items.map(item => { const percentage = analyticalInsight.risk.total ? (item.area ?? 0) / analyticalInsight.risk.total * 100 : 0; return <div className="composition-row" key={item.id}><span>{item.label} <b>{percentage.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%</b></span><i><em style={{width:`${percentage}%`,background:item.color}} /></i></div>; })}</div></article>
+            <article className="card mini-stat"><span>TINGKAT RISIKO DOMINAN</span><small className="insight-scope">{analyticalInsight.scope}</small><strong className="textual-stat" style={{color:riskColors[analyticalInsight.risk.level]}}>{analyticalInsight.risk.level}</strong><em>{analyticalInsight.risk.monitored ? `${analyticalInsight.risk.villages} wilayah terdampak` : "Data wilayah belum tersedia"}</em></article>
+            <article className="card condition-card"><div className="card-title"><div>KOMPOSISI RISIKO</div><span>{analyticalInsight.scope}</span></div><div>{analyticalInsight.risk.monitored ? analyticalInsight.risk.items.map(item => { const percentage = analyticalInsight.risk.total ? (item.area ?? 0) / analyticalInsight.risk.total * 100 : 0; return <div className="composition-row" key={item.id}><span>{item.label} <b>{percentage.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%</b></span><i><em style={{width:`${percentage}%`,background:item.color}} /></i></div>; }) : <span>Belum dipantau</span>}</div></article>
           </>}
         </aside>
       </section>
@@ -915,19 +984,7 @@ function LandPage() {
           <button disabled={tablePage === totalPages} aria-disabled={tablePage === totalPages} aria-label="Halaman berikutnya" onClick={() => setTablePage(page => Math.min(totalPages, page + 1))}>Lihat selanjutnya <ArrowRight size={14} aria-hidden="true"/></button>
         </div>}
       </article>
-      {detailRow && detailModel && createPortal(<div className="detail-modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) setDetailRow(null); }}>
-        <section className="detail-modal" role="dialog" aria-modal="true" aria-labelledby="detail-modal-title">
-          <header><div><span>{detailModel.eyebrow}</span><h2 id="detail-modal-title">{detailModel.name}</h2><small>{mapContext.selectedName ? `Distrik ${mapContext.selectedName}` : "Kabupaten Merauke"} · Data simulasi</small></div><button aria-label="Tutup detail" onClick={() => setDetailRow(null)}><X size={18} aria-hidden="true"/></button></header>
-          <div className="detail-modal-body">
-            <div className="detail-status-strip"><span>Status terpantau</span><strong style={{ color: detailModel.color, background: `${detailModel.color}18`, borderColor: `${detailModel.color}55` }}>{detailModel.status}</strong></div>
-            <div className="detail-metrics">{tableModel.headers.map((header, index) => <div key={header}><span>{header}</span><b>{detailRow.cells[index]}</b></div>)}</div>
-            <article><span>RINGKASAN KONDISI</span><p>{detailModel.description}</p></article>
-            <article className="detail-reason"><span>ALASAN PENETAPAN STATUS</span><p>{detailModel.reason}</p></article>
-            <article className="detail-recommendation"><span>REKOMENDASI TINDAK LANJUT</span><p>{detailModel.recommendation}</p></article>
-          </div>
-          <footer><small>Diperbarui 25 Juli 2026 · 22.42 WIT</small><button onClick={() => setDetailRow(null)}>Tutup</button></footer>
-        </section>
-      </div>, document.body)}
+      {detailRow && detailModel && <LandDetailModal model={detailModel} row={detailRow} headers={tableModel.headers} scope={mapContext.selectedName ? `Distrik ${mapContext.selectedName}` : "Kabupaten Merauke"} onClose={() => setDetailRow(null)} />}
     </div>
   );
 }

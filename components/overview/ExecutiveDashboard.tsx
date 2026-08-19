@@ -62,6 +62,7 @@ export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: 
   const productionRows = useMemo(() => recordsForScope("Semua Distrik", "Semua Kampung", seasonId), [seasonId]);
   const regencyProduction = useMemo(() => aggregateProduction(productionRows), [productionRows]);
   const selectedDistrict = districtId ? regions.find(item => item.id === districtId) ?? null : null;
+  const isMonitored = !selectedDistrict || selectedDistrict.monitoring_status === "active";
   const districtOptions = regions.filter(item => item.administrative_type === "district" && item.parent_id === "93.01");
   const scope = aggregateRegion(selectedDistrict?.id ?? "93.01", seasonId);
   const production = selectedDistrict
@@ -74,21 +75,21 @@ export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: 
   const target = Math.round(production.target);
   const achievement = target ? gkg / target * 100 : 0;
   const chartScale = regencyProduction.gkg ? production.gkg / regencyProduction.gkg : 0;
-  const chartData = getChartDataPoints(seasonId, "gkg_production_ton", regencyProduction.target, chartScale);
+  const chartData = isMonitored ? getChartDataPoints(seasonId, "gkg_production_ton", regencyProduction.target, chartScale) : [];
   const plantingStage4 = compareActualAtEquivalentStage("MT1-2026", "MT2-2026", 4, "planting_realization_ha");
   const productionStage4 = compareActualAtEquivalentStage("MT1-2026", "MT2-2026", 4, "gkg_production_ton");
   const finalComparison = compareProjectedFinalToCompletedSeason();
   const percentChange = (left: number, right: number) => left ? (right - left) / left * 100 : 0;
   const selectedRow = productionRows.find(row => row.id === districtId);
-  const comparisonModels = selectExecutiveYearOverYearComparisons({ seasonId, regionId:selectedDistrict?.id??"93.01", period:currentSeason?.reporting_cutoff??null, monitored:!selectedDistrict||selectedDistrict.monitoring_status==="active", values:{planting_area:planted,harvested_area:harvested,gkg_production:gkg,productivity:production.yieldRate} });
+  const comparisonModels = selectExecutiveYearOverYearComparisons({ seasonId, regionId:selectedDistrict?.id??"93.01", period:currentSeason?.reporting_cutoff??null, monitored:isMonitored, values:{planting_area:planted,harvested_area:harvested,gkg_production:gkg,productivity:production.yieldRate} });
   const comparisons = new Map(comparisonModels.map(model=>[model.indicator_id,model]));
 
   const kpis = [
-    { Icon: Sprout, label: "Luas Tanam", value: format(planted), unit: "ha", indicatorId:"planting_area" as YearOverYearIndicatorId },
-    { Icon: LandPlot, label: "Luas Panen", value: format(harvested), unit: "ha", indicatorId:"harvested_area" as YearOverYearIndicatorId },
-    { Icon: Wheat, label: "Produksi GKG", value: format(gkg), unit: "ton", indicatorId:"gkg_production" as YearOverYearIndicatorId },
-    { Icon: Gauge, label: "Produktivitas", value: format(production.yieldRate, 2), unit: "ton/ha", indicatorId:"productivity" as YearOverYearIndicatorId },
-    { Icon: PackageCheck, label: "Estimasi Beras", value: format(rice), unit: "ton", indicatorId:null },
+    { Icon: Sprout, label: "Luas Tanam", value: isMonitored ? format(planted) : "Belum dipantau", unit: isMonitored ? "ha" : "", indicatorId:"planting_area" as YearOverYearIndicatorId },
+    { Icon: LandPlot, label: "Luas Panen", value: isMonitored ? format(harvested) : "Belum dipantau", unit: isMonitored ? "ha" : "", indicatorId:"harvested_area" as YearOverYearIndicatorId },
+    { Icon: Wheat, label: "Produksi GKG", value: isMonitored ? format(gkg) : "Belum dipantau", unit: isMonitored ? "ton" : "", indicatorId:"gkg_production" as YearOverYearIndicatorId },
+    { Icon: Gauge, label: "Produktivitas", value: isMonitored ? format(production.yieldRate, 2) : "Belum dipantau", unit: isMonitored ? "ton/ha" : "", indicatorId:"productivity" as YearOverYearIndicatorId },
+    { Icon: PackageCheck, label: "Estimasi Beras", value: isMonitored ? format(rice) : "Belum dipantau", unit: isMonitored ? "ton" : "", indicatorId:null },
   ];
 
   return (
@@ -103,35 +104,35 @@ export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: 
       </section>
 
       <section className="card executive-filters" aria-label="Filter global dashboard">
-        <label><span>PERIODE</span><div><CalendarDays size={16}/><select value={seasonId} onChange={e => setSeason(e.target.value)}><option value="MT2-2026">MT II 2026 (Berjalan)</option><option value="MT1-2026">MT I 2026 (Selesai)</option></select></div></label>
-        <label><span>WILAYAH</span><div><MapPin size={16}/><select value={districtId ?? ""} onChange={e => setDistrict(e.target.value || null)}><option value="">Kabupaten Merauke</option>{districtOptions.map(row => <option key={row.id} value={row.id}>Distrik {row.name}{row.monitoring_status !== "active" ? " — Belum dipantau" : ""}</option>)}</select></div></label>
+        <label><span>PERIODE</span><div><CalendarDays size={16}/><select value={seasonId} onChange={e => { setProductionDetailOpen(false); setSeason(e.target.value); }}><option value="MT2-2026">MT II 2026 (Berjalan)</option><option value="MT1-2026">MT I 2026 (Selesai)</option></select></div></label>
+        <label><span>WILAYAH</span><div><MapPin size={16}/><select value={districtId ?? ""} onChange={e => { setProductionDetailOpen(false); setDistrict(e.target.value || null); }}><option value="">Kabupaten Merauke</option>{districtOptions.map(row => <option key={row.id} value={row.id}>Distrik {row.name}{row.monitoring_status !== "active" ? " — Belum dipantau" : ""}</option>)}</select></div></label>
         <label><span>KOMODITAS</span><div><Wheat size={16}/><select value={filters.commodityId} onChange={e => setCommodity(e.target.value)}><option value="PADI">Padi</option></select></div></label>
         <div className="executive-season"><span>STATUS MUSIM TANAM</span><strong><i/> {currentSeason?.display_name}</strong></div>
       </section>
 
       <section className="executive-kpis">
-        {kpis.map(({Icon,...item})=>{const comparison=item.indicatorId?comparisons.get(item.indicatorId):null,comparisonText=comparison?formatYearOverYearComparison(comparison):compactYieldNote;return <article className="card" key={item.label}><i><Icon size={26}/></i><div><span>{item.label}</span><strong>{item.value} <small>{item.unit}</small></strong><em className={comparison?.direction==="unavailable"?"comparison-unavailable":undefined} aria-label={comparison?`${item.label}: ${comparisonText}`:undefined}>{comparisonText}</em></div></article>})}
+        {kpis.map(({Icon,...item})=>{const comparison=item.indicatorId?comparisons.get(item.indicatorId):null,comparisonText=!isMonitored?"Belum dipantau":comparison?formatYearOverYearComparison(comparison):compactYieldNote;return <article className="card" key={item.label}><i><Icon size={26}/></i><div><span>{item.label}</span><strong aria-label={`${item.label}: ${item.value}${item.unit ? ` ${item.unit}` : ""}`}>{item.value} {item.unit && <small>{item.unit}</small>}</strong><em className={!isMonitored||comparison?.direction==="unavailable"?"comparison-unavailable":undefined} aria-label={`${item.label}: ${comparisonText}`}>{comparisonText}</em></div></article>})}
       </section>
 
       <section className="executive-primary">
         <article className="card executive-map">
           <ExecutiveTitle title="PETA SEBARAN LAHAN" action={() => onNavigate("Peta Lahan")}/>
-          <ExecutiveBigMap selectedRegionId={selectedDistrict?.id ?? null} selectedLabel={selectedDistrict ? `Distrik ${selectedDistrict.name}` : "Kabupaten Merauke"} hint={selectedDistrict?.monitoring_status === "not_monitored" ? "Belum dipantau" : selectedRow ? `${format(selectedRow.gkg)} ton GKG · wilayah terpantau` : "Pilih distrik untuk melihat data"} onSelect={setDistrict}/>
+          <ExecutiveBigMap selectedRegionId={selectedDistrict?.id ?? null} selectedLabel={selectedDistrict ? `Distrik ${selectedDistrict.name}` : "Kabupaten Merauke"} hint={selectedDistrict?.monitoring_status === "not_monitored" ? "Belum dipantau" : selectedRow ? `${format(selectedRow.gkg)} ton GKG · wilayah terpantau` : "Pilih distrik untuk melihat data"} onSelect={regionId => { setProductionDetailOpen(false); setDistrict(regionId); }}/>
         </article>
 
         <article className="card executive-chart">
-          <ExecutiveTitle title={`TARGET VS REALISASI PRODUKSI GKG — ${currentSeason?.name ?? ""}`} action={() => setProductionDetailOpen(true)}/>
+          <ExecutiveTitle title={`TARGET VS REALISASI PRODUKSI GKG — ${currentSeason?.name ?? ""}`} action={isMonitored ? () => setProductionDetailOpen(true) : undefined}/>
           <MonitoringLineChart data={chartData} unit="ton" selectedId={filters.snapshotId ?? undefined} ariaLabel="Grafik target dan realisasi produksi GKG" showSummaryStrip summaryStatus={currentSeason?.status} showPersistentValueLabels={false} />
         </article>
       </section>
 
       <section className="executive-secondary">
         <div className="executive-secondary-left">
-          <article className="card current-season"><ExecutiveTitle title="MUSIM TANAM TERPILIH"/><div><strong>{currentSeason?.display_name} <b>{currentSeason?.status === "completed" ? "Selesai" : "Berjalan"}</b></strong><span>Cakupan</span><em>{selectedDistrict ? `Distrik ${selectedDistrict.name}` : "Kabupaten Merauke"}</em><i><b style={{width:`${Math.min(100, achievement)}%`}}/></i><span>Cut-off</span><strong>{currentSeason?.reporting_cutoff}</strong><span>Status Data</span><b className="normal">Terpantau</b></div></article>
-          <article className="card production-recap"><ExecutiveTitle title="RINGKASAN PRODUKSI"/><div><p>Produksi GKG <b>{format(gkg)} ton</b></p><p>Estimasi Beras <b>{format(rice)} ton</b></p><p>Produktivitas <b>{format(production.yieldRate,2)} ton/ha</b></p><p>Target Produksi <b>{format(target)} ton</b></p><strong>Capaian Target <b>{format(achievement,1)}%</b></strong></div></article>
+          <article className="card current-season"><ExecutiveTitle title="MUSIM TANAM TERPILIH"/><div><strong>{currentSeason?.display_name} <b>{currentSeason?.status === "completed" ? "Selesai" : "Berjalan"}</b></strong><span>Cakupan</span><em>{selectedDistrict ? `Distrik ${selectedDistrict.name}` : "Kabupaten Merauke"}</em>{isMonitored && <i><b style={{width:`${Math.min(100, achievement)}%`}}/></i>}<span>Cut-off</span><strong>{currentSeason?.reporting_cutoff}</strong><span>Status Data</span><b className="normal">{isMonitored ? "Terpantau" : "Belum dipantau"}</b></div></article>
+          <article className="card production-recap"><ExecutiveTitle title="RINGKASAN PRODUKSI"/><div>{isMonitored ? <><p>Produksi GKG <b>{format(gkg)} ton</b></p><p>Estimasi Beras <b>{format(rice)} ton</b></p><p>Produktivitas <b>{format(production.yieldRate,2)} ton/ha</b></p><p>Target Produksi <b>{format(target)} ton</b></p><strong>Capaian Target <b>{format(achievement,1)}%</b></strong></> : <p>Indikator produksi <b>Belum dipantau</b></p>}</div></article>
         </div>
-        <article className="card top-regions"><ExecutiveTitle title="WILAYAH KONTRIBUTOR TERBESAR" action={() => onNavigate("Produksi")}/><div>{productionRows.slice().sort((a,b)=>b.gkg-a.gkg).slice(0,5).map(row=><p key={row.id}><span>{row.name}</span><i><b style={{width:`${row.gkg/Math.max(...productionRows.map(item=>item.gkg))*100}%`}}/></i><strong>{format(row.gkg)}</strong><em>{format(row.gkg/production.gkg*100,1)}%</em></p>)}</div></article>
-        <article className="card system-summary"><ExecutiveTitle title="RINGKASAN SISTEM"/><div>{[
+        <article className="card top-regions"><ExecutiveTitle title="WILAYAH KONTRIBUTOR TERBESAR" action={isMonitored ? () => onNavigate("Produksi") : undefined}/><div>{isMonitored ? productionRows.slice().sort((a,b)=>b.gkg-a.gkg).slice(0,5).map(row=><p key={row.id}><span>{row.name}</span><i><b style={{width:`${row.gkg/Math.max(...productionRows.map(item=>item.gkg))*100}%`}}/></i><strong>{format(row.gkg)}</strong><em>{format(row.gkg/production.gkg*100,1)}%</em></p>) : <p>Data kontributor wilayah belum dipantau.</p>}</div></article>
+        <article className="card system-summary"><ExecutiveTitle title="RINGKASAN SISTEM"/><div>{(isMonitored ? [
           `Luas tanam mencapai ${format(planted)} ha. Pembanding 2025 belum tersedia.`,
           `Fase dominan mengikuti data monitoring ${currentSeason?.name ?? "musim terpilih"}.`,
           `Produksi GKG mencapai ${format(gkg)} ton atau ${format(achievement,1)}% dari target.`,
@@ -149,11 +150,11 @@ export default function ExecutiveDashboard({ onNavigate }: { onNavigate: (page: 
           seasonId === "MT2-2026" && finalComparison
             ? `Proyeksi akhir MT II ${format(finalComparison.projection)} ton dibandingkan realisasi akhir MT I ${format(finalComparison.actual)} ton.`
             : seasonId === "MT2-2026" ? "Proyeksi akhir belum tersedia." : "MT I merupakan realisasi musim selesai.",
-        ].map(text=><p key={text}><CheckCircle2 size={13}/>{text}</p>)}<button onClick={()=>onNavigate("Produksi")}>Lihat Semua Insight <ChevronRight size={15}/></button></div></article>
+        ] : ["Wilayah belum dipantau. Insight angka, tren, persentase, dan perbandingan tidak dibentuk tanpa data monitoring."]).map(text=><p key={text}><CheckCircle2 size={13}/>{text}</p>)}{isMonitored && <button onClick={()=>onNavigate("Produksi")}>Lihat Semua Insight <ChevronRight size={15}/></button>}</div></article>
       </section>
 
-      <section className="card executive-alerts"><ExecutiveTitle title="ALERT & INFORMASI PENTING"/><div><AlertItem Icon={CalendarDays} title={currentSeason?.display_name ?? "Musim terpilih"} text={`Cut-off ${currentSeason?.reporting_cutoff ?? "-"}`}/><AlertItem Icon={Target} title={`Capaian produksi ${format(achievement, 1)}%`} text="Berdasarkan target dan realisasi terpilih" warn={achievement < 95}/><AlertItem Icon={TrendingUp} title="Rendemen standar Papua" text={`${format(millingYield.rate, 2)}% · SKGB BPS 2018`}/><AlertItem Icon={Tractor} title={`Validasi data ${format(scope.validation_rate)}%`} text="Sumber: Dinas Pertanian & BPS" warn/></div></section>
-      {productionDetailOpen && <ExecutiveProductionModal
+      <section className="card executive-alerts"><ExecutiveTitle title="ALERT & INFORMASI PENTING"/><div><AlertItem Icon={CalendarDays} title={currentSeason?.display_name ?? "Musim terpilih"} text={`Cut-off ${currentSeason?.reporting_cutoff ?? "-"}`}/>{isMonitored ? <><AlertItem Icon={Target} title={`Capaian produksi ${format(achievement, 1)}%`} text="Berdasarkan target dan realisasi terpilih" warn={achievement < 95}/><AlertItem Icon={TrendingUp} title="Rendemen standar Papua" text={`${format(millingYield.rate, 2)}% · SKGB BPS 2018`}/><AlertItem Icon={Tractor} title={`Validasi data ${format(scope.validation_rate)}%`} text="Sumber: Dinas Pertanian & BPS" warn/></> : <AlertItem Icon={Target} title="Indikator belum dipantau" text="Belum tersedia data terverifikasi untuk wilayah terpilih" warn/>}</div></section>
+      {isMonitored && productionDetailOpen && <ExecutiveProductionModal
         production={gkg}
         target={target}
         rice={rice}
