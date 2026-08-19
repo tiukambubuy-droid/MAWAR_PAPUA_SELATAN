@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent, RefObject } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { ArrowLeft, ArrowRight, BarChart3, ChevronDown, CloudSun, FileText, LayoutDashboard, Map, Network, RotateCcw, Search, ShieldCheck, Sprout, TrendingUp, Wrench, X } from "lucide-react";
@@ -55,6 +55,63 @@ const nav = [
 type MapLevel = "province" | "district";
 type LandLayer = "Luas Tanam" | "Fase Tanam" | "Tingkat Risiko";
 type LandTableRow = { cells: string[]; statusIndex: number; validationIndex: number };
+
+type CollisionPanelLayout = {
+  placement: "up" | "down";
+  top: number;
+  left: number;
+  width: number;
+  maxHeight: number;
+};
+
+function useCollisionAwarePanel(open: boolean, contentKey: string | number, triggerRef: RefObject<HTMLDivElement | null>, panelRef: RefObject<HTMLDivElement | null>) {
+  const [layout, setLayout] = useState<CollisionPanelLayout | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    let frame = 0;
+    const update = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const trigger = triggerRef.current;
+        const panel = panelRef.current;
+        if (!trigger || !panel) return;
+        const margin = 8;
+        const gap = 8;
+        const viewportWidth = document.documentElement.clientWidth;
+        const viewportHeight = document.documentElement.clientHeight;
+        if (![viewportWidth, viewportHeight].every(Number.isFinite) || viewportWidth <= margin * 2 || viewportHeight <= margin * 2) return;
+        const triggerRect = trigger.getBoundingClientRect();
+        const spaceBelow = Math.max(0, viewportHeight - triggerRect.bottom - gap - margin);
+        const spaceAbove = Math.max(0, triggerRect.top - gap - margin);
+        const naturalHeight = Math.max(1, panel.scrollHeight);
+        const placement: CollisionPanelLayout["placement"] = spaceBelow >= Math.min(naturalHeight, 240) || spaceBelow >= spaceAbove ? "down" : "up";
+        const availableHeight = placement === "down" ? spaceBelow : spaceAbove;
+        const maxWidth = Math.max(1, viewportWidth - margin * 2);
+        const width = Math.min(Math.max(1, triggerRect.width), maxWidth);
+        const left = Math.min(Math.max(margin, triggerRect.left), viewportWidth - margin - width);
+        const maxHeight = Math.max(1, Math.floor(availableHeight));
+        const renderedHeight = Math.min(naturalHeight, maxHeight);
+        const top = placement === "down" ? triggerRect.bottom + gap : triggerRect.top - gap - renderedHeight;
+        const next = { placement, top, left, width, maxHeight };
+        setLayout(current => current && Object.keys(next).every(key => current[key as keyof CollisionPanelLayout] === next[key as keyof CollisionPanelLayout]) ? current : next);
+      });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    if (triggerRef.current) observer?.observe(triggerRef.current);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+      observer?.disconnect();
+    };
+  }, [open, contentKey, panelRef, triggerRef]);
+
+  return open ? layout : null;
+}
 
 const monitoringCoverage = districtMonitoringCoverage();
 
@@ -606,7 +663,12 @@ function LandPage() {
   const [minimumFilter, setMinimumFilter] = useState("Semua");
   const [detailRow, setDetailRow] = useState<LandTableRow | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchActiveIndex, setSearchActiveIndex] = useState(-1);
   const tableRef = useRef<HTMLElement | null>(null);
+  const tablePanelTriggerRef = useRef<HTMLDivElement>(null);
+  const tablePanelRef = useRef<HTMLDivElement>(null);
+  const mapPanelTriggerRef = useRef<HTMLDivElement>(null);
+  const mapPanelRef = useRef<HTMLDivElement>(null);
   const [mapContext, setMapContext] = useState<{ level: MapLevel; selectedName: string; districtNames: string[] }>({ level: "province", selectedName: "", districtNames: [] });
   const handleMapContext = useMemo(
     () => (level: MapLevel, selectedName: string, districtNames: string[]) => {
@@ -745,9 +807,21 @@ function LandPage() {
       .filter(row => row.cells.join(" ").toLowerCase().includes(query))
       .slice(0, 6);
   }, [search, tableModel]);
+  const tablePanelLayout = useCollisionAwarePanel(searchOpen && Boolean(search.trim()), `${search}:${searchMatches.length}`, tablePanelTriggerRef, tablePanelRef);
+  const mapPanelLayout = useCollisionAwarePanel(regionSearchOpen, `${regionQuery}:${matchingMapRegions.length}`, mapPanelTriggerRef, mapPanelRef);
+  const effectiveSearchActiveIndex = searchActiveIndex >= 0 && searchActiveIndex < searchMatches.length ? searchActiveIndex : -1;
+  const searchOptionId = (row: LandTableRow) => `land-search-option-${(getRegionByName(row.cells[0])?.id ?? row.cells[0]).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+  const closeTableSearch = () => {
+    setSearchOpen(false);
+    setSearchActiveIndex(-1);
+  };
+  useEffect(() => {
+    if (!searchOpen || effectiveSearchActiveIndex < 0) return;
+    document.getElementById(searchOptionId(searchMatches[effectiveSearchActiveIndex]))?.scrollIntoView({ block: "nearest" });
+  }, [effectiveSearchActiveIndex, searchMatches, searchOpen]);
   const openSearchResult = (row: LandTableRow) => {
     setSearch(row.cells[0]);
-    setSearchOpen(false);
+    closeTableSearch();
     setTablePage(1);
     setDetailRow(row);
     window.setTimeout(() => tableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
@@ -884,16 +958,21 @@ function LandPage() {
         <div className="segmented" aria-label="Lapisan peta">
           {(["Luas Tanam", "Fase Tanam", "Tingkat Risiko"] as LandLayer[]).map(item => <button key={item} className={layer === item ? "on" : ""} onClick={() => { setLayer(item); setTablePage(1); setCategoryFilter("Semua"); setMinimumFilter("Semua"); setDetailRow(null); }}>{item}</button>)}
         </div>
-        <div className={`search-box ${searchOpen && search.trim() ? "is-open" : ""}`}>
+        <div ref={tablePanelTriggerRef} className={`search-box ${searchOpen && search.trim() ? "is-open" : ""}`}>
           <span aria-hidden="true"><Search size={16}/></span>
           <input
             value={search}
             onFocus={() => setSearchOpen(true)}
-            onBlur={() => window.setTimeout(() => setSearchOpen(false), 120)}
-            onChange={event => { setSearch(event.target.value); setSearchOpen(true); setTablePage(1); }}
+            onBlur={() => window.setTimeout(closeTableSearch, 120)}
+            onChange={event => { setSearch(event.target.value); setSearchOpen(true); setSearchActiveIndex(-1); setTablePage(1); }}
             onKeyDown={event => {
-              if (event.key === "Escape") setSearchOpen(false);
-              if (event.key === "Enter" && searchMatches.length) openSearchResult(searchMatches[0]);
+              if (event.key === "Escape") { event.preventDefault(); closeTableSearch(); }
+              if (event.key === "Tab") closeTableSearch();
+              if (event.key === "ArrowDown" && searchMatches.length) { event.preventDefault(); setSearchOpen(true); setSearchActiveIndex(index => index < 0 ? 0 : Math.min(index + 1, searchMatches.length - 1)); }
+              if (event.key === "ArrowUp" && searchMatches.length) { event.preventDefault(); setSearchOpen(true); setSearchActiveIndex(index => index < 0 ? searchMatches.length - 1 : Math.max(index - 1, 0)); }
+              if (event.key === "Home" && searchMatches.length) { event.preventDefault(); setSearchOpen(true); setSearchActiveIndex(0); }
+              if (event.key === "End" && searchMatches.length) { event.preventDefault(); setSearchOpen(true); setSearchActiveIndex(searchMatches.length - 1); }
+              if (event.key === "Enter" && effectiveSearchActiveIndex >= 0 && searchMatches[effectiveSearchActiveIndex]) { event.preventDefault(); openSearchResult(searchMatches[effectiveSearchActiveIndex]); }
             }}
             placeholder={`Cari ${entityLabel.toLowerCase()}…`}
             aria-label={`Cari data ${entityLabel.toLowerCase()}`}
@@ -901,12 +980,13 @@ function LandPage() {
             aria-autocomplete="list"
             aria-expanded={searchOpen && Boolean(search.trim())}
             aria-controls="land-search-results"
+            aria-activedescendant={searchOpen && effectiveSearchActiveIndex >= 0 && searchMatches[effectiveSearchActiveIndex] ? searchOptionId(searchMatches[effectiveSearchActiveIndex]) : undefined}
           />
-          {search && <button className="search-clear" aria-label="Hapus pencarian" onMouseDown={event => event.preventDefault()} onClick={() => { setSearch(""); setSearchOpen(false); setTablePage(1); }}><X size={15} aria-hidden="true"/></button>}
-          {searchOpen && search.trim() && <div id="land-search-results" className="search-results" role="listbox">
+          {search && <button className="search-clear" aria-label="Hapus pencarian" onMouseDown={event => event.preventDefault()} onClick={() => { setSearch(""); closeTableSearch(); setTablePage(1); }}><X size={15} aria-hidden="true"/></button>}
+          {searchOpen && search.trim() && <div ref={tablePanelRef} id="land-search-results" className="search-results collision-panel" role="listbox" data-placement={tablePanelLayout?.placement ?? "down"} style={tablePanelLayout ? { top: tablePanelLayout.top, left: tablePanelLayout.left, width: tablePanelLayout.width, maxHeight: tablePanelLayout.maxHeight } : { visibility: "hidden" }}>
             <div className="search-results-head"><strong>HASIL PENCARIAN</strong><span>{searchMatches.length} ditemukan</span></div>
-            {searchMatches.length ? searchMatches.map(row => (
-              <button key={row.cells[0]} role="option" aria-selected="false" onMouseDown={event => event.preventDefault()} onClick={() => openSearchResult(row)}>
+            {searchMatches.length ? searchMatches.map((row, index) => (
+              <button id={searchOptionId(row)} key={row.cells[0]} role="option" aria-selected={index === effectiveSearchActiveIndex} className={index === effectiveSearchActiveIndex ? "active" : ""} onMouseDown={event => event.preventDefault()} onMouseEnter={() => setSearchActiveIndex(index)} onClick={() => openSearchResult(row)}>
                 <span><strong>{row.cells[0]}</strong><small>{entityLabel} · {row.cells[row.statusIndex]}</small></span>
                 <em>Lihat detail <ArrowRight size={13} aria-hidden="true"/></em>
               </button>
@@ -919,7 +999,7 @@ function LandPage() {
           <div className="card-title"><div><span className="live-dot" /> LAPISAN: {layer.toUpperCase()}</div><span>Batas administrasi resmi</span></div>
           <div className="map-region-search" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setRegionSearchOpen(false); }}>
             <label htmlFor="map-region-query">Cari wilayah pada peta</label>
-            <div className="map-region-search-field">
+            <div ref={mapPanelTriggerRef} className="map-region-search-field">
               <Search className="map-region-search-icon" size={17} aria-hidden="true" />
               <input id="map-region-query" value={regionQuery} placeholder="Cari kabupaten atau distrik..." autoComplete="off"
                 role="combobox" aria-autocomplete="list" aria-expanded={regionSearchOpen} aria-controls="map-region-options"
@@ -936,7 +1016,7 @@ function LandPage() {
                 <ChevronDown className="map-region-chevron" size={17} aria-hidden="true" />
               </div>
             </div>
-            {regionSearchOpen && <div id="map-region-options" className="map-region-options" role="listbox" aria-label="Wilayah Kabupaten Merauke">
+            {regionSearchOpen && <div ref={mapPanelRef} id="map-region-options" className="map-region-options collision-panel" role="listbox" aria-label="Wilayah Kabupaten Merauke" data-placement={mapPanelLayout?.placement ?? "down"} style={mapPanelLayout ? { top: mapPanelLayout.top, left: mapPanelLayout.left, width: mapPanelLayout.width, maxHeight: mapPanelLayout.maxHeight } : { visibility: "hidden" }}>
               {matchingMapRegions.length ? matchingMapRegions.map((option, index) => <button type="button" id={`map-region-${option.id}`} key={option.id} role="option"
                 aria-selected={option.typeLabel === "Kabupaten" ? !filters.districtId : filters.districtId === option.id}
                 className={index === regionActiveIndex ? "active" : ""} onMouseDown={event => event.preventDefault()} onMouseEnter={() => setRegionActiveIndex(index)} onClick={() => chooseMapRegion(option)}>
