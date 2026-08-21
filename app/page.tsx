@@ -670,7 +670,19 @@ function LandPage() {
   const tablePanelRef = useRef<HTMLDivElement>(null);
   const mapPanelTriggerRef = useRef<HTMLDivElement>(null);
   const mapPanelRef = useRef<HTMLDivElement>(null);
+  const regionFilterContextRef = useRef(`${filters.seasonId}|${filters.regencyId}|${filters.districtId ?? ""}|${filters.villageId ?? ""}`);
   const [mapContext, setMapContext] = useState<{ level: MapLevel; selectedName: string; districtNames: string[] }>({ level: "province", selectedName: "", districtNames: [] });
+  const closeRegionSearch = useCallback(() => {
+    setRegionSearchOpen(false);
+    setRegionActiveIndex(0);
+  }, []);
+  useEffect(() => {
+    const nextContext = `${filters.seasonId}|${filters.regencyId}|${filters.districtId ?? ""}|${filters.villageId ?? ""}`;
+    if (regionFilterContextRef.current === nextContext) return;
+    regionFilterContextRef.current = nextContext;
+    setRegionDraft(null);
+    closeRegionSearch();
+  }, [closeRegionSearch, filters.districtId, filters.regencyId, filters.seasonId, filters.villageId]);
   const handleMapContext = useMemo(
     () => (level: MapLevel, selectedName: string, districtNames: string[]) => {
       setTablePage(1);
@@ -789,8 +801,7 @@ function LandPage() {
   const chooseMapRegion = (option: (typeof mapRegionOptions)[number]) => {
     setDistrict(districtIdForMapRegion(option));
     setRegionDraft(null);
-    setRegionSearchOpen(false);
-    setRegionActiveIndex(0);
+    closeRegionSearch();
   };
   const entityLabel = mapContext.level === "province"
     ? "Kabupaten"
@@ -808,8 +819,9 @@ function LandPage() {
       .filter(row => row.cells.join(" ").toLowerCase().includes(query))
       .slice(0, 6);
   }, [search, tableModel]);
+  const regionPanelOpen = regionSearchOpen && Boolean(regionQuery.trim());
   const tablePanelLayout = useCollisionAwarePanel(searchOpen && Boolean(search.trim()), `${search}:${searchMatches.length}`, tablePanelTriggerRef, tablePanelRef);
-  const mapPanelLayout = useCollisionAwarePanel(regionSearchOpen, `${regionQuery}:${matchingMapRegions.length}`, mapPanelTriggerRef, mapPanelRef);
+  const mapPanelLayout = useCollisionAwarePanel(regionPanelOpen, `${regionQuery}:${matchingMapRegions.length}`, mapPanelTriggerRef, mapPanelRef);
   const effectiveSearchActiveIndex = searchActiveIndex >= 0 && searchActiveIndex < searchMatches.length ? searchActiveIndex : -1;
   const searchOptionId = (row: LandTableRow) => `land-search-option-${(getRegionByName(row.cells[0])?.id ?? row.cells[0]).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   const closeTableSearch = () => {
@@ -984,7 +996,7 @@ function LandPage() {
             aria-activedescendant={searchOpen && effectiveSearchActiveIndex >= 0 && searchMatches[effectiveSearchActiveIndex] ? searchOptionId(searchMatches[effectiveSearchActiveIndex]) : undefined}
           />
           {search && <button className="search-clear" aria-label="Hapus pencarian" onMouseDown={event => event.preventDefault()} onClick={() => { setSearch(""); closeTableSearch(); setTablePage(1); }}><X size={15} aria-hidden="true"/></button>}
-          {searchOpen && search.trim() && <div ref={tablePanelRef} id="land-search-results" className="search-results collision-panel" role="listbox" data-placement={tablePanelLayout?.placement ?? "down"} style={tablePanelLayout ? { top: tablePanelLayout.top, left: tablePanelLayout.left, width: tablePanelLayout.width, maxHeight: tablePanelLayout.maxHeight } : { visibility: "hidden" }}>
+          {searchOpen && search.trim() && createPortal(<div ref={tablePanelRef} id="land-search-results" className="search-results collision-panel" role="listbox" data-placement={tablePanelLayout?.placement ?? "down"} style={tablePanelLayout ? { top: tablePanelLayout.top, left: tablePanelLayout.left, width: tablePanelLayout.width, maxHeight: tablePanelLayout.maxHeight } : { visibility: "hidden" }}>
             <div className="search-results-head"><strong>HASIL PENCARIAN</strong><span>{searchMatches.length} ditemukan</span></div>
             {searchMatches.length ? searchMatches.map((row, index) => (
               <button id={searchOptionId(row)} key={row.cells[0]} role="option" aria-selected={index === effectiveSearchActiveIndex} className={index === effectiveSearchActiveIndex ? "active" : ""} onMouseDown={event => event.preventDefault()} onMouseEnter={() => setSearchActiveIndex(index)} onClick={() => openSearchResult(row)}>
@@ -992,38 +1004,38 @@ function LandPage() {
                 <em>Lihat detail <ArrowRight size={13} aria-hidden="true"/></em>
               </button>
             )) : <div className="search-empty"><strong>Data tidak ditemukan</strong><small>Periksa penulisan atau coba kata lain.</small></div>}
-          </div>}
+          </div>, document.body)}
         </div>
       </section>
       <section className="land-layout">
         <article className="card large-map">
           <div className="card-title"><div><span className="live-dot" /> LAPISAN: {layer.toUpperCase()}</div><span>Batas administrasi resmi</span></div>
-          <div className="map-region-search" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setRegionSearchOpen(false); }}>
+          <div className="map-region-search" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) closeRegionSearch(); }}>
             <label htmlFor="map-region-query">Cari wilayah pada peta</label>
             <div ref={mapPanelTriggerRef} className="map-region-search-field">
               <Search className="map-region-search-icon" size={17} aria-hidden="true" />
               <input id="map-region-query" value={regionQuery} placeholder="Cari kabupaten atau distrik..." autoComplete="off"
-                role="combobox" aria-autocomplete="list" aria-expanded={regionSearchOpen} aria-controls="map-region-options"
-                aria-activedescendant={regionSearchOpen && matchingMapRegions[regionActiveIndex] ? `map-region-${matchingMapRegions[regionActiveIndex].id}` : undefined}
-                onFocus={() => setRegionSearchOpen(true)} onChange={event => { setRegionDraft(event.target.value); setRegionSearchOpen(true); setRegionActiveIndex(0); }}
+                role="combobox" aria-autocomplete="list" aria-expanded={regionPanelOpen} aria-controls="map-region-options"
+                aria-activedescendant={regionPanelOpen && matchingMapRegions[regionActiveIndex] ? `map-region-${matchingMapRegions[regionActiveIndex].id}` : undefined}
+                onFocus={() => { if (regionQuery.trim()) setRegionSearchOpen(true); }} onChange={event => { const nextQuery = event.target.value; setRegionDraft(nextQuery); setRegionSearchOpen(Boolean(nextQuery.trim())); setRegionActiveIndex(0); }}
                 onKeyDown={event => {
-                  if (event.key === "Escape") setRegionSearchOpen(false);
+                  if (event.key === "Escape") closeRegionSearch();
                   if (event.key === "ArrowDown") { event.preventDefault(); setRegionSearchOpen(true); setRegionActiveIndex(index => Math.min(index + 1, matchingMapRegions.length - 1)); }
                   if (event.key === "ArrowUp") { event.preventDefault(); setRegionActiveIndex(index => Math.max(0, index - 1)); }
                   if (event.key === "Enter" && matchingMapRegions[regionActiveIndex]) { event.preventDefault(); chooseMapRegion(matchingMapRegions[regionActiveIndex]); }
                 }} />
               <div className="map-region-search-actions">
-                {regionQuery && <button type="button" aria-label="Hapus pencarian wilayah" onClick={() => { setRegionDraft(""); setRegionSearchOpen(true); setRegionActiveIndex(0); }}><X size={16} aria-hidden="true" /></button>}
+                {regionQuery && <button type="button" aria-label="Hapus pencarian wilayah" onClick={() => { setRegionDraft(""); closeRegionSearch(); }}><X size={16} aria-hidden="true" /></button>}
                 <ChevronDown className="map-region-chevron" size={17} aria-hidden="true" />
               </div>
             </div>
-            {regionSearchOpen && <div ref={mapPanelRef} id="map-region-options" className="map-region-options collision-panel" role="listbox" aria-label="Wilayah Kabupaten Merauke" data-placement={mapPanelLayout?.placement ?? "down"} style={mapPanelLayout ? { top: mapPanelLayout.top, left: mapPanelLayout.left, width: mapPanelLayout.width, maxHeight: mapPanelLayout.maxHeight } : { visibility: "hidden" }}>
+            {regionPanelOpen && createPortal(<div ref={mapPanelRef} id="map-region-options" className="map-region-options collision-panel" role="listbox" aria-label="Wilayah Kabupaten Merauke" data-placement={mapPanelLayout?.placement ?? "down"} style={mapPanelLayout ? { top: mapPanelLayout.top, left: mapPanelLayout.left, width: mapPanelLayout.width, maxHeight: mapPanelLayout.maxHeight } : { visibility: "hidden" }}>
               {matchingMapRegions.length ? matchingMapRegions.map((option, index) => <button type="button" id={`map-region-${option.id}`} key={option.id} role="option"
                 aria-selected={option.typeLabel === "Kabupaten" ? !filters.districtId : filters.districtId === option.id}
                 className={index === regionActiveIndex ? "active" : ""} onMouseDown={event => event.preventDefault()} onMouseEnter={() => setRegionActiveIndex(index)} onClick={() => chooseMapRegion(option)}>
                 <strong>{option.name}</strong><span><span aria-hidden="true">{REGION_SEPARATOR}</span> {option.typeLabel}</span>
               </button>) : <p role="status">Wilayah tidak ditemukan.</p>}
-            </div>}
+            </div>, document.body)}
           </div>
           <GeoAdministrativeMap layer={layer} onContextChange={handleMapContext} />
         </article>

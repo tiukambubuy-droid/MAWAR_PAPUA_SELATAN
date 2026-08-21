@@ -158,8 +158,8 @@ button:focus-visible, select:focus-visible, input:focus-visible, [role="button"]
 .production-kpis strong { font-size:clamp(22px,1.7vw,29px); white-space:normal; }
 .production-visual-grid { grid-template-columns:minmax(0,1.2fr) repeat(2,minmax(0,.9fr)); gap:14px; }
 .production-chart-legend,.production-trend p,.production-region>p,.region-bars span,.region-bars b,.composition-labels span,.composition-labels strong,.composition-meta small,.composition-meta span { font-size:12px; line-height:1.4; }
-.production-trend svg { height:300px; overflow:visible; }
-.production-trend svg text { font-size:12px; }
+.production-trend .monitoring-chart-stage>svg { height:300px; overflow:visible; }
+.production-trend .monitoring-chart-stage>svg text { font-size:12px; }
 .production-bottom { grid-template-columns:minmax(0,1fr); gap:14px; }
 .production-table-card table { width:100%; min-width:0; table-layout:fixed; }
 .production-table-card th,.production-table-card td { padding:12px 8px; font-size:13px; overflow-wrap:anywhere; }
