@@ -387,6 +387,7 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
         const data = await response.json() as { features?: GeoFeature[] };
         return Array.isArray(data.features) ? data.features : [];
       },
+      shouldLoadFallback: context => context.regionLevel === "district",
     }, viewCallbacks);
     requestControllerRef.current = controller;
     return () => {
@@ -465,7 +466,7 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
       </div>
       <div className={`real-map-canvas ${focusedDistrict ? "district-detail-view" : ""}`}>
         {status === "loading" && <div className="map-state" role="status" aria-live="polite"><span className="map-loader" /><strong>Memuat peta resmi BIG...</strong><small>{isSlowLoading ? "Peta masih dimuat. Data indikator tetap tersedia." : "Menyiapkan geometri wilayah resmi"}</small></div>}
-        {status === "error" && <div className="map-state error"><strong>Peta resmi belum dapat dimuat</strong><small>Layanan BIG dan data cadangan belum berhasil dibaca.</small><button aria-label="Coba muat ulang peta BIG" onClick={() => { void requestControllerRef.current?.retry(); }}>Coba lagi</button></div>}
+        {status === "error" && <div className="map-state error"><strong>Peta resmi belum dapat dimuat</strong><small>{level === "province" ? "Batas Provinsi Papua Selatan belum tersedia dari layanan BIG." : "Layanan BIG dan data cadangan belum berhasil dibaca."}</small><button aria-label="Coba muat ulang peta BIG" onClick={() => { void requestControllerRef.current?.retry(); }}>Coba lagi</button></div>}
         {status === "ready" && mapModel && focusedDistrict ? (
           <div className="district-focus-layout">
             <section className="focused-map-card">
@@ -586,7 +587,7 @@ function GeoAdministrativeMap({ layer, onContextChange }: { layer: LandLayer; on
             </svg>
           </>
         ) : null}
-        {!focusedDistrict && <div className="official-source"><span>◉</span><div><strong>Sumber geometri</strong><small>Badan Informasi Geospasial · WGS 84{sourceMode === "fallback" ? " · cadangan lokal" : ""}</small></div></div>}
+        {status === "ready" && !focusedDistrict && <div className="official-source"><span>◉</span><div><strong>Sumber geometri</strong><small>Badan Informasi Geospasial · WGS 84{sourceMode === "fallback" ? " · cadangan lokal" : ""}</small></div></div>}
         {level === "province" ? (
           <div className="province-hint"><strong>Kabupaten Merauke aktif</strong><small>Klik wilayah berwarna untuk melihat pembagian distrik</small></div>
         ) : status === "ready" && !focusedDistrict ? (

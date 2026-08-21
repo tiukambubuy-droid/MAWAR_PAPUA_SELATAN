@@ -20,7 +20,24 @@ const deferred = () => {
   return { promise, resolve, reject };
 };
 
-function createHarness(remoteLoads, fallbackLoads = []) {
+function createFakeClock() {
+  let nextId = 1;
+  const tasks = new Map();
+  return {
+    setTimer(callback) { const id = nextId++; tasks.set(id, callback); return id; },
+    clearTimer(id) { tasks.delete(id); },
+    fireNext() {
+      const entry = tasks.entries().next().value;
+      assert.ok(entry, "expected an active timeout");
+      const [id, callback] = entry;
+      tasks.delete(id);
+      callback();
+    },
+    get size() { return tasks.size; },
+  };
+}
+
+function createHarness(remoteLoads, fallbackLoads = [], controllerOptions = {}, includeFallback = true) {
   const calls = { remote: [], fallback: [], loading: [], success: [], failure: [] };
   let state = { features: [], sourceMode: "big", status: "ready", context: null };
   const viewCallbacks = controllerModule.createBigMapViewCallbacks(event => {
@@ -29,18 +46,128 @@ function createHarness(remoteLoads, fallbackLoads = []) {
     if (event.type === "failure") calls.failure.push({ context: event.context });
     state = controllerModule.reduceBigMapViewState(state, event);
   });
-  const controller = controllerModule.createBigMapRequestController({
+  const dependencies = {
     loadRemote: (loadContext, signal) => {
       calls.remote.push({ context: loadContext, signal });
       return remoteLoads[calls.remote.length - 1].promise;
     },
-    loadFallback: (loadContext, signal) => {
+    ...(includeFallback ? { loadFallback: (loadContext, signal) => {
       calls.fallback.push({ context: loadContext, signal });
       return fallbackLoads[calls.fallback.length - 1].promise;
-    },
-  }, viewCallbacks);
+    } } : {}),
+  };
+  const controller = controllerModule.createBigMapRequestController(dependencies, viewCallbacks, controllerOptions);
   return { controller, calls, getState: () => state };
 }
+
+test("production BIG timeout is centralized at ten seconds", () => {
+  assert.equal(controllerModule.BIG_REMOTE_TIMEOUT_MS, 10_000);
+});
+
+test("remote success before timeout applies BIG once and clears its timer", async () => {
+  const remote = deferred(), fallback = deferred(), clock = createFakeClock();
+  const harness = createHarness([remote], [fallback], { remoteTimeoutMs: 5, setTimer: clock.setTimer, clearTimer: clock.clearTimer });
+  const pending = harness.controller.load(context("remote-before-timeout"));
+  assert.equal(clock.size, 1);
+  remote.resolve([{ id: "remote" }]);
+  await pending;
+  assert.equal(clock.size, 0);
+  assert.equal(harness.calls.fallback.length, 0);
+  assert.deepEqual(harness.calls.success.map(call => call.sourceMode), ["big"]);
+});
+
+test("hanging remote times out, aborts, and invokes fallback exactly once", async () => {
+  const remote = deferred(), fallback = deferred(), clock = createFakeClock();
+  const harness = createHarness([remote], [fallback], { remoteTimeoutMs: 5, setTimer: clock.setTimer, clearTimer: clock.clearTimer });
+  const pending = harness.controller.load(context("hanging-district"));
+  clock.fireNext();
+  assert.equal(harness.calls.remote[0].signal.aborted, true);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(harness.calls.fallback.length, 1);
+  fallback.resolve([{ id: "local" }]);
+  await pending;
+  assert.equal(harness.calls.success.length, 1);
+  assert.equal(harness.calls.success[0].sourceMode, "fallback");
+  assert.equal(harness.getState().status, "ready");
+});
+
+test("remote completion after timeout cannot replace the final fallback result", async () => {
+  const remote = deferred(), fallback = deferred(), clock = createFakeClock();
+  const harness = createHarness([remote], [fallback], { remoteTimeoutMs: 5, setTimer: clock.setTimer, clearTimer: clock.clearTimer });
+  const pending = harness.controller.load(context("late-remote"));
+  clock.fireNext();
+  await Promise.resolve();
+  fallback.resolve([{ id: "fallback-final" }]);
+  await pending;
+  remote.resolve([{ id: "late-remote" }]);
+  await Promise.resolve();
+  assert.deepEqual(harness.getState().features, [{ id: "fallback-final" }]);
+  assert.deepEqual(harness.calls.success.map(call => call.sourceMode), ["fallback"]);
+});
+
+test("cancel before timeout clears the timer and never starts stale fallback", async () => {
+  const remote = deferred(), fallback = deferred(), clock = createFakeClock();
+  const harness = createHarness([remote], [fallback], { remoteTimeoutMs: 5, setTimer: clock.setTimer, clearTimer: clock.clearTimer });
+  const pending = harness.controller.load(context("cancel-before-timeout"));
+  harness.controller.cancel();
+  await pending;
+  assert.equal(clock.size, 0);
+  assert.equal(harness.calls.remote[0].signal.aborted, true);
+  assert.equal(harness.calls.fallback.length, 0);
+  assert.equal(harness.calls.success.length, 0);
+  assert.equal(harness.calls.failure.length, 0);
+});
+
+test("a new generation clears the old timeout without affecting its own timer or result", async () => {
+  const oldRemote = deferred(), newRemote = deferred(), clock = createFakeClock();
+  const harness = createHarness([oldRemote, newRemote], [], { remoteTimeoutMs: 5, setTimer: clock.setTimer, clearTimer: clock.clearTimer });
+  const oldPending = harness.controller.load(context("old"));
+  const newPending = harness.controller.load(context("new"));
+  await oldPending;
+  assert.equal(clock.size, 1);
+  newRemote.resolve([{ id: "new" }]);
+  await newPending;
+  assert.equal(clock.size, 0);
+  assert.deepEqual(harness.getState().features, [{ id: "new" }]);
+  assert.deepEqual(harness.calls.success.map(call => call.context.requestKey), ["new"]);
+});
+
+test("dispose before timeout clears resources and prevents every later callback", async () => {
+  const remote = deferred(), clock = createFakeClock();
+  const harness = createHarness([remote], [], { remoteTimeoutMs: 5, setTimer: clock.setTimer, clearTimer: clock.clearTimer });
+  const pending = harness.controller.load(context("dispose-before-timeout"));
+  harness.controller.dispose();
+  await pending;
+  assert.equal(clock.size, 0);
+  assert.equal(harness.calls.remote[0].signal.aborted, true);
+  assert.equal(harness.calls.success.length, 0);
+  assert.equal(harness.calls.failure.length, 0);
+});
+
+test("timeout without a fallback ends loading in an explicit failure state", async () => {
+  const remote = deferred(), clock = createFakeClock();
+  const harness = createHarness([remote], [], { remoteTimeoutMs: 5, setTimer: clock.setTimer, clearTimer: clock.clearTimer }, false);
+  const pending = harness.controller.load(context("province-timeout", "93", "province"));
+  clock.fireNext();
+  await pending;
+  assert.equal(harness.calls.fallback.length, 0);
+  assert.equal(harness.calls.failure.length, 1);
+  assert.equal(harness.getState().status, "error");
+});
+
+test("fallback rejection after timeout is handled once and ends loading", async () => {
+  const remote = deferred(), fallback = deferred(), clock = createFakeClock();
+  const harness = createHarness([remote], [fallback], { remoteTimeoutMs: 5, setTimer: clock.setTimer, clearTimer: clock.clearTimer });
+  const pending = harness.controller.load(context("fallback-fails"));
+  clock.fireNext();
+  await Promise.resolve();
+  fallback.reject(new Error("fallback down"));
+  await pending;
+  assert.equal(harness.calls.fallback.length, 1);
+  assert.equal(harness.calls.failure.length, 1);
+  assert.equal(harness.getState().status, "error");
+});
 
 test("production BIG controller aborts stale requests and only applies the latest geometry state", async () => {
   const first = deferred(), second = deferred(), third = deferred();

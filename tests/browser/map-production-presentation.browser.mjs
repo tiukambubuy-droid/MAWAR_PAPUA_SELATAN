@@ -6,6 +6,8 @@ import { spawn } from "node:child_process";
 import { executeBrowserLifecycle, waitForDevToolsActivePort, waitForHttpReady } from "./browser-harness.mjs";
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+// The dedicated BIG timeout path allows the 10s application deadline plus bounded fallback/render margin.
+const BIG_TIMEOUT_BROWSER_WAIT_MS = 15_000;
 const chromeCandidates = process.platform === "win32"
   ? ["C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe", "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"]
   : process.platform === "darwin"
@@ -18,6 +20,13 @@ await executeBrowserLifecycle({
  spawnChrome:({chromeExecutable,profilePath})=>{const child=spawn(chromeExecutable,["--headless=new","--remote-debugging-port=0","--remote-allow-origins=*",`--user-data-dir=${profilePath}`,"--disable-gpu","--disable-software-rasterizer","--disable-gpu-compositing","--disable-breakpad","--disable-crash-reporter","--disable-background-networking","--disable-component-update","--disable-sync","--force-prefers-reduced-motion","--no-sandbox","--no-first-run","--no-default-browser-check","about:blank"],{stdio:["ignore","ignore","pipe"],windowsHide:true});child.stderr.on("data",chunk=>{chromeStderr+=chunk.toString()});return child},
  runBrowser:async({port,profileHandle,serverProcess:server,chromeProcess:chrome,getProcessError,registerBrowserClose})=>{
   const origin=`http://127.0.0.1:${port}`,profile=profileHandle.profilePath;
+  const loadBigFixture=async url=>{const response=await fetch(url,{signal:AbortSignal.timeout(BIG_TIMEOUT_BROWSER_WAIT_MS)});assert.equal(response.ok,true,`fixture BIG gagal: ${response.status}`);const data=await response.json();assert.ok(Array.isArray(data.features)&&data.features.length>0,`fixture BIG kosong: ${url}`);return data};
+  const districtFixtureQuery=new URLSearchParams({where:"wadmkk='Merauke'",outFields:"namobj,wadmkc,wadmkk,wadmpr",returnGeometry:"true",outSR:"4326",geometryPrecision:"4",maxAllowableOffset:"0.001",f:"geojson"});
+  const provinceFixtureQuery=new URLSearchParams({where:"wadmpr='Papua Selatan'",outFields:"namobj,wadmkk,wadmpr",returnGeometry:"true",outSR:"4326",geometryPrecision:"4",maxAllowableOffset:"0.002",f:"geojson"});
+  const [districtBigFixture,provinceBigFixture]=await Promise.all([
+    loadBigFixture(`https://geoservices.big.go.id/rbi/rest/services/BATASWILAYAH/BATAS_KECAMATAN_AR/MapServer/0/query?${districtFixtureQuery}`),
+    loadBigFixture(`https://geoservices.big.go.id/rbi/rest/services/BATASWILAYAH/BATAS_WILAYAH/MapServer/13/query?${provinceFixtureQuery}`),
+  ]);
   let socket,closeBrowser;
   await waitForHttpReady({url:origin,isProcessAlive:()=>server.exitCode===null&&!getProcessError(server),timeoutMs:60000,pollMs:150,fetchTimeoutMs:2000,processDetails:()=>({exitCode:server.exitCode,stdout:serverStdout,stderr:serverStderr})});
   assert.equal(getProcessError(server),null,`Next test server gagal start (exit ${server.exitCode}): ${serverStderr.slice(-1000)}`);
@@ -69,6 +78,11 @@ await executeBrowserLifecycle({
     for (let attempt = 0; attempt < 80; attempt++) { if (await evaluate(expression)) return; await sleep(25); }
     throw new Error(`Kondisi browser tidak tercapai: ${message}`);
   };
+  const waitUntilWithin = async (expression, message, timeoutMs = BIG_TIMEOUT_BROWSER_WAIT_MS) => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) { if (await evaluate(expression)) return; await sleep(100); }
+    throw new Error(`Kondisi browser tidak tercapai dalam ${timeoutMs}ms: ${message}`);
+  };
   const verifyPaginationReset = async ({ pageSelector, change, verify, reset, label }) => {
     await waitUntil(`[...document.querySelectorAll('${pageSelector} .table-pagination button')].some(button=>button.textContent==='2')`, `${label}: halaman kedua tersedia`);
     await evaluate(`(()=>{const button=[...document.querySelectorAll('${pageSelector} .table-pagination button')].find(node=>node.textContent==='2');button.click()})()`);
@@ -92,6 +106,27 @@ await executeBrowserLifecycle({
   const selectChange = (pageSelector, label, value) => `(()=>{const select=[...document.querySelectorAll('${pageSelector} select')].find(node=>node.closest('label')?.innerText.startsWith(${JSON.stringify(label)}));select.value=${JSON.stringify(value)};select.dispatchEvent(new Event('change',{bubbles:true}))})()`;
   const inputChange = (pageSelector, value) => `(()=>{const input=document.querySelector('${pageSelector} input'),set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}))})()`;
   await send("Page.enable"); await send("Runtime.enable"); await send("Network.enable");
+  const bigInterceptionSource=`(()=>{
+    const districtFixture=${JSON.stringify(districtBigFixture)},provinceFixture=${JSON.stringify(provinceBigFixture)};
+    const nativeFetch=window.fetch.bind(window),initialMode=new URLSearchParams(location.search).get('qaBig')||'pass';
+    const state={mode:initialMode,districtCalls:0,provinceCalls:0,releases:[]};
+    state.releaseAll=()=>{for(const release of state.releases.splice(0))release()};
+    window.__mawarBigQa=state;
+    window.fetch=(input,init={})=>{
+      const url=typeof input==='string'?input:input instanceof URL?input.href:input.url;
+      if(!url.includes('geoservices.big.go.id/'))return nativeFetch(input,init);
+      const province=url.includes('/13/query'),shouldHang=(state.mode==='hang-province'&&province)||(state.mode==='hang-district'&&!province);
+      if(province)state.provinceCalls+=1;else state.districtCalls+=1;
+      if(state.mode==='reject-district'&&!province)return Promise.reject(new TypeError('Controlled BIG network rejection'));
+      if(state.mode==='http503-district'&&!province)return Promise.resolve(new Response('',{status:503,statusText:'Controlled BIG failure'}));
+      if(state.mode==='slow-district'&&!province)return new Promise(resolve=>setTimeout(()=>resolve(new Response(JSON.stringify(districtFixture),{status:200,headers:{'Content-Type':'application/geo+json'}})),250));
+      if(state.mode==='fixture-pass')return Promise.resolve(new Response(JSON.stringify(province?provinceFixture:districtFixture),{status:200,headers:{'Content-Type':'application/geo+json'}}));
+      if(!shouldHang)return nativeFetch(input,init);
+      return new Promise((resolve,reject)=>{
+        state.releases.push(()=>nativeFetch(input,{...init,signal:undefined}).then(resolve,reject));
+      });
+    };
+  })()`;
   await send("Network.setBlockedURLs", { urls: ["https://geoservices.big.go.id/*"] });
 
   const viewports = [[1920, 1080], [1440, 900], [1366, 768], [1024, 768], [768, 1024], [430, 932], [390, 844]];
@@ -798,6 +833,52 @@ await executeBrowserLifecycle({
   for(const selector of[".nav-item[aria-disabled=true]",".report-unavailable"]){for(const action of["click","Enter"," "]){await evaluate(action==="click"?"document.activeElement.blur()":"document.querySelector('.brand-mark').focus()");const before=await disabledSnapshot();if(action==="click"){const point=await evaluate(`(()=>{const r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2}})()`);await send("Input.dispatchMouseEvent",{type:"mousePressed",x:point.x,y:point.y,button:"left",clickCount:1});await send("Input.dispatchMouseEvent",{type:"mouseReleased",x:point.x,y:point.y,button:"left",clickCount:1})}else{await pressKey(action)}await sleep(20);assert.deepEqual(await disabledSnapshot(),before,`${selector} ${action}: tidak boleh mengubah aplikasi`)}}
   assert.equal(await evaluate("document.querySelector('.profile').matches('button,a,[role=button],[tabindex]')"),false);assert.equal(await evaluate("getComputedStyle(document.querySelector('.profile')).cursor"),"default");
   await evaluate("history.back()");await waitUntil("document.querySelectorAll('.nav-item[aria-current=page]').length===1","Back active tunggal");const backActive=await evaluate("document.querySelector('.nav-item[aria-current=page]').textContent.trim()");await evaluate("history.forward()");await waitUntil(`document.querySelector('.nav-item[aria-current=page]')?.textContent.trim()!==${JSON.stringify(backActive)}`,"Forward active berubah");
+
+  // Controlled production-build interception proves the bounded remote lifecycle without broadening normal waits.
+  await send("Page.addScriptToEvaluateOnNewDocument", { source: bigInterceptionSource });
+  await send("Network.setBlockedURLs", { urls: [] });
+  await send("Emulation.setDeviceMetricsOverride",{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+  for(const mode of["reject-district","http503-district"]){
+    await send("Page.navigate",{url:`${origin}/?season=MT2-2026&district=93.01.05&qaBig=${mode}#view=peta-lahan`});
+    await waitUntilWithin("document.body?.innerText?.includes('cadangan lokal')&&!document.querySelector('.map-state')",`${mode}: fallback lokal`,5_000);
+    await evaluate("document.querySelector('.focused-map-card header button')?.click()");await waitUntilWithin("document.querySelectorAll('.geo-layer.district>g').length===22",`${mode}: daftar distrik lengkap`,2_000);
+    assert.equal(await evaluate("document.querySelectorAll('.geo-layer.district>g').length"),22,`${mode}: 22 distrik`);
+  }
+  await send("Page.navigate",{url:`${origin}/?season=MT2-2026&district=93.01.05&qaBig=slow-district#view=peta-lahan`});
+  await waitUntilWithin("Boolean(document.querySelector('.focused-map-card'))&&!document.body?.innerText?.includes('cadangan lokal')","remote lambat sebelum timeout tetap memakai BIG");
+  await evaluate("document.querySelector('.focused-map-card header button')?.click()");await waitUntilWithin("document.querySelectorAll('.geo-layer.district>g').length===22","remote BIG lambat menampilkan daftar distrik",2_000);
+  assert.equal(await evaluate("document.querySelectorAll('.geo-layer.district>g').length"),22,"remote BIG lambat memuat 22 distrik");
+  await send("Page.navigate",{url:`${origin}/?season=MT2-2026&district=93.01.05&qaBig=hang-district#view=peta-lahan`});
+  await waitUntilWithin("document.querySelector('.map-state')?.innerText.includes('Peta masih dimuat. Data indikator tetap tersedia.')","status lambat tampil sebelum timeout",4_000);
+  await waitUntilWithin("document.body?.innerText?.includes('cadangan lokal')&&!document.querySelector('.map-state')","BIG distrik hang beralih ke fallback lokal");
+  await evaluate("document.querySelector('.focused-map-card header button')?.click()");await waitUntilWithin("document.querySelectorAll('.geo-layer.district>g').length===22","fallback timeout menampilkan daftar distrik",2_000);
+  const districtTimeoutState=await evaluate(`(()=>({regions:document.querySelectorAll('.geo-layer.district>g').length,source:document.querySelector('.official-source')?.innerText,zoomButtons:document.querySelectorAll('.map-zoom-controls button').length,search:Boolean(document.querySelector('#map-region-query')),loading:Boolean(document.querySelector('.map-state')),requests:window.__mawarBigQa?.districtCalls}))()`);
+  assert.equal(districtTimeoutState.regions,22,"fallback timeout memuat 22 distrik");assert.ok(districtTimeoutState.source.includes("cadangan lokal"));assert.equal(districtTimeoutState.zoomButtons,3);assert.equal(districtTimeoutState.search,true);assert.equal(districtTimeoutState.loading,false);
+  await evaluate("window.__mawarBigQa.releaseAll()");await sleep(300);
+  assert.ok(await evaluate("document.body?.innerText?.includes('cadangan lokal')"),"remote terlambat tidak mengganti fallback");
+  await evaluate("window.__mawarBigQa.mode='fixture-pass';document.querySelector('.geo-layer.district>g:not(.geo-disabled)')?.dispatchEvent(new MouseEvent('click',{bubbles:true}))");await waitUntilWithin("Boolean(document.querySelector('.district-focus-layout'))","fallback distrik tetap dapat diklik dan mengganti context",5_000);
+
+  await send("Page.navigate",{url:`${origin}/?season=MT2-2026&qaBig=hang-province#view=peta-lahan`});
+  await waitUntilWithin("Boolean(document.querySelector('.map-state.error'))&&!document.querySelector('.map-loader')","BIG provinsi hang berakhir sebagai failure eksplisit");
+  const provinceFailure=await evaluate(`(()=>{const button=document.querySelector('.map-state.error button');return{text:document.querySelector('.map-state.error')?.innerText,name:button?.getAttribute('aria-label'),tag:button?.tagName,calls:window.__mawarBigQa?.provinceCalls,loading:Boolean(document.querySelector('.map-loader')),map:Boolean(document.querySelector('.geo-layer.province'))}})()`);
+  assert.ok(provinceFailure.text.includes("Batas Provinsi Papua Selatan belum tersedia"));assert.equal(provinceFailure.name,"Coba muat ulang peta BIG");assert.equal(provinceFailure.tag,"BUTTON");assert.equal(provinceFailure.loading,false);assert.equal(provinceFailure.map,false);
+  await evaluate("window.__mawarBigQa.mode='fixture-pass';document.querySelector('.map-state.error button').focus()");await pressKey("Enter");
+  await waitUntilWithin("Boolean(document.querySelector('.geo-layer.province>g'))&&!document.querySelector('.map-state.error')","retry provinsi berhasil memakai BIG");
+  const provinceReady=await evaluate(`(()=>({calls:window.__mawarBigQa?.provinceCalls,source:document.querySelector('.official-source')?.innerText,regions:document.querySelectorAll('.geo-layer.province>g').length,error:Boolean(document.querySelector('.map-state.error'))}))()`);
+  assert.equal(provinceReady.calls,provinceFailure.calls+1,"retry membuat tepat satu request baru");assert.ok(provinceReady.regions>0&&provinceReady.source.includes("Badan Informasi Geospasial")&&!provinceReady.source.includes("cadangan lokal")&&!provinceReady.error);
+
+  // Ten mount/context/unmount cycles use the normal blocked-network fallback path and must all settle.
+  await send("Network.setBlockedURLs", { urls: ["https://geoservices.big.go.id/*"] });
+  for(let cycle=0;cycle<10;cycle++){
+    const district=cycle%2===0?"93.01.05":"93.01.14";
+    await send("Page.navigate",{url:`${origin}/?season=MT2-2026&district=${district}#view=peta-lahan`});
+    await waitUntilWithin("document.body?.innerText?.includes('cadangan lokal')&&!document.querySelector('.map-state')",`lifecycle BIG ${cycle+1}: fallback siap`,5_000);
+    await evaluate("document.querySelector('.focused-map-card header button')?.click()");await waitUntilWithin("document.querySelectorAll('.geo-layer.district>g').length===22",`lifecycle BIG ${cycle+1}: daftar distrik`,2_000);
+    assert.equal(await evaluate("document.querySelectorAll('.geo-layer.district>g').length"),22,`lifecycle BIG ${cycle+1}: distrik lengkap`);
+    await evaluate("document.querySelector('button.nav-item[aria-label=\"Buka halaman Produksi\"]')?.click()");await waitFor(".production-page");
+  }
+  assert.equal(runtimeErrors.length,0,`lifecycle BIG tanpa console/runtime error: ${JSON.stringify(runtimeErrors)}`);
+  console.log(`BIG timeout lifecycle PASS: ${JSON.stringify({district:districtTimeoutState,provinceFailure,provinceReady,cycles:10,waitMs:BIG_TIMEOUT_BROWSER_WAIT_MS})}`);
   console.log(`Food layout metrics: ${JSON.stringify(foodLayoutMetrics)}`);
   console.log(`Navigation layout metrics: ${JSON.stringify(navigationLayoutMetrics)}`);
   console.log(`Zoom matrix PASS: ${zoomMetrics.length} combinations; minimum font ${Math.min(...zoomMetrics.map(x=>x.minFont))}px; minimum targets ${zoomMetrics.map(x=>x.minTarget).join(',')}`);

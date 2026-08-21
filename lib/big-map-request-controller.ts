@@ -16,7 +16,18 @@ export type BigMapCallbackError = {
 
 export type BigMapLoadDependencies<TFeature> = {
   loadRemote: (context: BigMapLoadContext, signal: AbortSignal) => Promise<TFeature[]>;
-  loadFallback: (context: BigMapLoadContext, signal: AbortSignal) => Promise<TFeature[]>;
+  loadFallback?: (context: BigMapLoadContext, signal: AbortSignal) => Promise<TFeature[]>;
+  shouldLoadFallback?: (context: BigMapLoadContext) => boolean;
+};
+
+export const BIG_REMOTE_TIMEOUT_MS = 10_000;
+
+type TimerHandle = ReturnType<typeof globalThis.setTimeout>;
+
+export type BigMapRequestControllerOptions = {
+  remoteTimeoutMs?: number;
+  setTimer?: (callback: () => void, delayMs: number) => TimerHandle;
+  clearTimer?: (handle: TimerHandle) => void;
 };
 
 export type BigMapLoadCallbacks<TFeature> = {
@@ -55,14 +66,34 @@ export function createBigMapViewCallbacks<TFeature>(dispatch: (event: BigMapView
 export function createBigMapRequestController<TFeature>(
   dependencies: BigMapLoadDependencies<TFeature>,
   callbacks: BigMapLoadCallbacks<TFeature>,
+  options: BigMapRequestControllerOptions = {},
 ) {
+  const configuredTimeoutMs = options.remoteTimeoutMs ?? BIG_REMOTE_TIMEOUT_MS;
+  const remoteTimeoutMs = Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0
+    ? configuredTimeoutMs
+    : BIG_REMOTE_TIMEOUT_MS;
+  const setTimer = options.setTimer ?? ((callback, delayMs) => globalThis.setTimeout(callback, delayMs));
+  const clearTimer = options.clearTimer ?? (handle => globalThis.clearTimeout(handle));
   let generation = 0;
   let activeController: AbortController | null = null;
+  let activeTimer: TimerHandle | null = null;
   let latestContext: BigMapLoadContext | null = null;
   let disposed = false;
 
   const isAbort = (error: unknown) => error instanceof Error && error.name === "AbortError";
-  const isCurrent = (token: number, signal: AbortSignal) => !disposed && !signal.aborted && token === generation;
+  const isCurrent = (token: number) => !disposed && token === generation;
+
+  const clearActiveTimer = () => {
+    if (activeTimer === null) return;
+    clearTimer(activeTimer);
+    activeTimer = null;
+  };
+
+  const cancelActiveRequest = () => {
+    clearActiveTimer();
+    activeController?.abort();
+    activeController = null;
+  };
 
   const reportCallbackError = (incident: BigMapCallbackError) => {
     try {
@@ -81,49 +112,99 @@ export function createBigMapRequestController<TFeature>(
   };
 
   const run = async (context: BigMapLoadContext) => {
-    activeController?.abort();
+    cancelActiveRequest();
     const token = ++generation;
-    const controller = new AbortController();
-    activeController = controller;
     latestContext = context;
     if (disposed) return;
     safelyInvoke("loading", context, () => callbacks.onLoading(context));
 
+    const remoteController = new AbortController();
+    activeController = remoteController;
     let remoteFeatures: TFeature[] | null = null;
     let remoteError: unknown;
+    let didTimeout = false;
+    let remoteTimer: TimerHandle | null = null;
+    let removeAbortListener = () => {};
     try {
-      remoteFeatures = await dependencies.loadRemote(context, controller.signal);
+      const aborted = new Promise<never>((_resolve, reject) => {
+        const onAbort = () => {
+          const error = new Error("BIG request cancelled");
+          error.name = "AbortError";
+          reject(error);
+        };
+        remoteController.signal.addEventListener("abort", onAbort, { once: true });
+        removeAbortListener = () => remoteController.signal.removeEventListener("abort", onAbort);
+      });
+      const timedOut = new Promise<never>((_resolve, reject) => {
+        remoteTimer = setTimer(() => {
+          if (!isCurrent(token) || remoteController.signal.aborted) return;
+          didTimeout = true;
+          reject(new Error(`BIG remote request timed out after ${remoteTimeoutMs} ms`));
+          remoteController.abort();
+        }, remoteTimeoutMs);
+        activeTimer = remoteTimer;
+      });
+      remoteFeatures = await Promise.race([
+        dependencies.loadRemote(context, remoteController.signal),
+        aborted,
+        timedOut,
+      ]);
       if (!remoteFeatures.length) throw new Error("No boundary features");
     } catch (error) {
       remoteError = error;
+    } finally {
+      removeAbortListener();
+      if (remoteTimer !== null) clearTimer(remoteTimer);
+      if (activeTimer === remoteTimer) activeTimer = null;
     }
 
     if (remoteFeatures) {
-      if (isCurrent(token, controller.signal)) {
+      if (isCurrent(token)) {
+        activeController = null;
         safelyInvoke("success", context, () => callbacks.onSuccess(remoteFeatures, "big", context));
       }
       return;
     }
 
-    if (isAbort(remoteError) || !isCurrent(token, controller.signal)) return;
+    if (!isCurrent(token) || (isAbort(remoteError) && !didTimeout)) return;
 
+    const fallbackController = new AbortController();
+    activeController = fallbackController;
     let fallbackFeatures: TFeature[] | null = null;
     let fallbackError: unknown;
+    let removeFallbackAbortListener = () => {};
     try {
-      fallbackFeatures = await dependencies.loadFallback(context, controller.signal);
+      if (!dependencies.loadFallback || dependencies.shouldLoadFallback?.(context) === false) throw remoteError;
+      const fallbackAborted = new Promise<never>((_resolve, reject) => {
+        const onAbort = () => {
+          const error = new Error("BIG fallback request cancelled");
+          error.name = "AbortError";
+          reject(error);
+        };
+        fallbackController.signal.addEventListener("abort", onAbort, { once: true });
+        removeFallbackAbortListener = () => fallbackController.signal.removeEventListener("abort", onAbort);
+      });
+      fallbackFeatures = await Promise.race([
+        dependencies.loadFallback(context, fallbackController.signal),
+        fallbackAborted,
+      ]);
       if (!fallbackFeatures.length) throw new Error("No fallback boundary features");
     } catch (error) {
       fallbackError = error;
+    } finally {
+      removeFallbackAbortListener();
     }
 
     if (fallbackFeatures) {
-      if (isCurrent(token, controller.signal)) {
+      if (isCurrent(token) && !fallbackController.signal.aborted) {
+        activeController = null;
         safelyInvoke("success", context, () => callbacks.onSuccess(fallbackFeatures, "fallback", context));
       }
       return;
     }
 
-    if (isAbort(fallbackError) || !isCurrent(token, controller.signal)) return;
+    if (isAbort(fallbackError) || !isCurrent(token) || fallbackController.signal.aborted) return;
+    activeController = null;
     safelyInvoke("failure", context, () => callbacks.onFailure(fallbackError, context));
   };
 
@@ -138,14 +219,12 @@ export function createBigMapRequestController<TFeature>(
     },
     cancel() {
       generation += 1;
-      activeController?.abort();
-      activeController = null;
+      cancelActiveRequest();
     },
     dispose() {
       disposed = true;
       generation += 1;
-      activeController?.abort();
-      activeController = null;
+      cancelActiveRequest();
     },
   };
 }
