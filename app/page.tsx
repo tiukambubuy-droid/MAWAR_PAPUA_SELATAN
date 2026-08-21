@@ -31,6 +31,7 @@ import { createMapRegionOptions, districtIdForMapRegion, filterMapRegionOptions,
 import { getLandRecordsForRegion } from "@/lib/land-monitoring";
 import { formatMonitoringTimestamp, latestMonitoringTimestamp } from "@/lib/monitoring-presentation";
 import { useAccessibleModal } from "@/components/ui/useAccessibleModal";
+import { LogoutButton } from "@/components/auth/LogoutButton";
 
 const activeRegionCounts = getActiveMonitoringRegionCounts();
 const canonicalDistrictNames = regions
@@ -1171,6 +1172,7 @@ function HomeContent() {
             </button>
           ))}
         </nav>
+        <LogoutButton />
         <div className="side-status">
           <span className="pulse" />
           Sistem aktif
