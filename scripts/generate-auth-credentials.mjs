@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
 import ts from "typescript";
-import { readHiddenValue, TerminalSignalError } from "../lib/auth/generator-terminal.mjs";
+import { formatAuthEnvironment, readHiddenValue, TerminalSignalError } from "../lib/auth/generator-terminal.mjs";
 
 if (process.argv.length > 2) throw new Error("Credential tidak boleh diberikan melalui command-line argument.");
 if (!stdin.isTTY || !stdout.isTTY || typeof stdin.setRawMode !== "function") throw new Error("Jalankan generator ini pada terminal interaktif.");
@@ -20,10 +20,11 @@ try {
   const password = await readHiddenValue({ input: stdin, output: stdout });
   const passwordHash = await auth.createPasswordHash(password);
   const sessionSecret = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
-  const quotedUsername = JSON.stringify(username);
-  stdout.write(`MAWAR_AUTH_USERNAME=${quotedUsername}\n`);
-  stdout.write(`MAWAR_AUTH_PASSWORD_HASH=${passwordHash}\n`);
-  stdout.write(`MAWAR_AUTH_SESSION_SECRET=${sessionSecret}\n`);
+  const credential = { username, passwordHash, sessionSecret };
+  stdout.write("\n# Next.js .env.local (gunakan \\$ untuk karakter $; jangan salin backslash ini ke Vercel)\n");
+  stdout.write(`${formatAuthEnvironment(credential, "local")}\n`);
+  stdout.write("\n# Vercel Production / direct environment (gunakan $ biasa; jangan simpan password plaintext pada file environment)\n");
+  stdout.write(`${formatAuthEnvironment(credential, "vercel")}\n`);
 } catch (error) {
   if (error instanceof TerminalSignalError) process.exitCode = error.exitCode;
   else throw error;

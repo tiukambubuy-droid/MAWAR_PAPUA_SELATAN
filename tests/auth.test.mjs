@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { EventEmitter } from "node:events";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import ts from "typescript";
-import { readHiddenValue, TerminalSignalError } from "../lib/auth/generator-terminal.mjs";
+import { escapeDotenvLocalValue, formatAuthEnvironment, readHiddenValue, TerminalSignalError } from "../lib/auth/generator-terminal.mjs";
+import { sanitizeSyntheticEnvironment } from "./browser/auth-test-environment.mjs";
 
 async function loadTypeScriptModule(path) {
   const moduleSource = await readFile(path, "utf8");
@@ -167,4 +172,43 @@ test("hidden credential prompt restores terminal for success, errors and support
   const ctrlC = terminalFixture(), ctrlPromise = readHiddenValue({ input: ctrlC.input, output: ctrlC.output, signalEmitter: ctrlC.signals });
   ctrlC.input.emit("data", Buffer.from("hidden\u0003"));await assert.rejects(ctrlPromise, error => error instanceof TerminalSignalError && error.exitCode === 130);assert.equal(ctrlC.input.isRaw, false);
   let writes = 0;const writeFailure = terminalFixture(() => { writes += 1;if (writes === 2) throw new Error("write failed"); });const writePromise = readHiddenValue({ input: writeFailure.input, output: writeFailure.output, signalEmitter: writeFailure.signals });writeFailure.input.emit("data", Buffer.from("value\r"));await assert.rejects(writePromise, /write failed/u);assert.equal(writeFailure.input.isRaw, false);
+});
+
+test("environment formatter separates local dotenv escaping from raw Vercel values", async () => {
+  const rawHash = hash, credential = { username: "synthetic-admin", passwordHash: rawHash, sessionSecret: "synthetic-secret" };
+  const local = formatAuthEnvironment(credential, "local"), vercel = formatAuthEnvironment(credential, "vercel");
+  const localHashLine = local.split("\n").find(line => line.startsWith("MAWAR_AUTH_PASSWORD_HASH="));
+  const vercelHashLine = vercel.split("\n").find(line => line.startsWith("MAWAR_AUTH_PASSWORD_HASH="));
+  assert.equal(localHashLine, `MAWAR_AUTH_PASSWORD_HASH=${escapeDotenvLocalValue(rawHash)}`);
+  assert.equal(vercelHashLine, `MAWAR_AUTH_PASSWORD_HASH=${rawHash}`);
+  assert.equal(localHashLine.slice("MAWAR_AUTH_PASSWORD_HASH=".length).replaceAll("\\$", "$"), rawHash);
+  assert.ok(!local.includes(password));
+  assert.equal(await auth.verifyPassword("test-password-auth-001", rawHash), true);
+  assert.equal(escapeDotenvLocalValue("slash\\value$tail"), "slash\\\\value\\$tail");
+  assert.equal(formatAuthEnvironment(credential, "vercel"), formatAuthEnvironment(credential, "vercel"));
+  for (const value of ["line\nbreak", "tab\tvalue", "nul\u0000value"]) assert.throws(() => escapeDotenvLocalValue(value), /karakter kontrol/u);
+  assert.notEqual(escapeDotenvLocalValue(rawHash), escapeDotenvLocalValue(escapeDotenvLocalValue(rawHash)));
+});
+
+test("synthetic browser environment cleanup is case-insensitive and preserves unrelated keys", async () => {
+  const source = { MAWAR_AUTH_USERNAME: "old", mawar_auth_username: "old-lower", Mawar_Auth_Password_Hash: "old-hash", mAwAr_AuTh_SeSsIoN_SeCrEt: "old-secret", MAWAR_AUTH_EXTRA: "old-extra", MAWAR_AUTHOR: "keep", MAWAR_AUTHENTICATION_MODE: "keep", OTHER_MAWAR_AUTH_VALUE: "keep" };
+  const credentials = { username: "synthetic-admin", passwordHash: hash, sessionSecret: secret };
+  const sanitized = sanitizeSyntheticEnvironment(source, credentials);
+  assert.deepEqual(source, { MAWAR_AUTH_USERNAME: "old", mawar_auth_username: "old-lower", Mawar_Auth_Password_Hash: "old-hash", mAwAr_AuTh_SeSsIoN_SeCrEt: "old-secret", MAWAR_AUTH_EXTRA: "old-extra", MAWAR_AUTHOR: "keep", MAWAR_AUTHENTICATION_MODE: "keep", OTHER_MAWAR_AUTH_VALUE: "keep" });
+  assert.deepEqual(Object.keys(sanitized).filter(key => key.toUpperCase().startsWith("MAWAR_AUTH_")).sort(), ["MAWAR_AUTH_PASSWORD_HASH", "MAWAR_AUTH_SESSION_SECRET", "MAWAR_AUTH_USERNAME"]);
+  assert.equal(sanitized.MAWAR_AUTH_PASSWORD_HASH, hash);assert.ok(sanitized.MAWAR_AUTH_PASSWORD_HASH.includes("$")&&!sanitized.MAWAR_AUTH_PASSWORD_HASH.includes("\\$"));
+  assert.equal(sanitized.MAWAR_AUTHOR, "keep");assert.equal(sanitized.MAWAR_AUTHENTICATION_MODE, "keep");assert.equal(sanitized.OTHER_MAWAR_AUTH_VALUE, "keep");
+});
+
+test("Next dotenv parser restores escaped synthetic credentials without touching repository env", async () => {
+  const credentials = { username: "dotenv-synthetic-admin", passwordHash: hash, sessionSecret: secret }, directory = await mkdtemp(join(tmpdir(), "mawar-auth-006-dotenv-"));
+  try {
+    await writeFile(join(directory, ".env.local"), `${formatAuthEnvironment(credentials, "local")}\n`, "utf8");
+    const childSource = `const { loadEnvConfig } = require("@next/env"); for (const key of Object.keys(process.env)) if (key.toUpperCase().startsWith("MAWAR_AUTH_")) delete process.env[key]; loadEnvConfig(process.env.AUTH_DOTENV_DIR); const parsed = { username: process.env.MAWAR_AUTH_USERNAME, hash: process.env.MAWAR_AUTH_PASSWORD_HASH, secret: process.env.MAWAR_AUTH_SESSION_SECRET }; const expected = { username: process.env.AUTH_EXPECTED_USERNAME, hash: process.env.AUTH_EXPECTED_HASH, secret: process.env.AUTH_EXPECTED_SECRET }; process.exitCode = parsed.username !== expected.username ? 2 : parsed.hash !== expected.hash ? 3 : parsed.secret !== expected.secret ? 4 : parsed.hash.includes("\\\\") ? 5 : (parsed.hash.match(/\\$/g) ?? []).length !== 3 ? 6 : 0;`;
+    const childEnvironment = sanitizeSyntheticEnvironment(process.env, credentials);
+    Object.assign(childEnvironment, { AUTH_DOTENV_DIR: directory, AUTH_EXPECTED_USERNAME: credentials.username, AUTH_EXPECTED_HASH: credentials.passwordHash, AUTH_EXPECTED_SECRET: credentials.sessionSecret });
+    const result = spawnSync(process.execPath, ["-e", childSource], { cwd: process.cwd(), env: childEnvironment, encoding: "utf8", windowsHide: true });
+    assert.equal(result.status, 0, `@next/env harus memulihkan hash raw dari file dotenv escaped (status ${result.status}, stderr ${result.stderr?.slice(-300) ?? ""})`);
+    assert.equal(auth.parsePasswordHash(credentials.passwordHash)?.hash.length, 32);assert.equal(await auth.verifyPassword(password, credentials.passwordHash), true);assert.equal(auth.parsePasswordHash(escapeDotenvLocalValue(credentials.passwordHash)), null, "format escaped tidak boleh dipakai langsung sebagai process.env");
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });

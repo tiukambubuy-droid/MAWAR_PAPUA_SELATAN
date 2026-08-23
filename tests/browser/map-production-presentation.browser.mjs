@@ -1,14 +1,20 @@
 import assert from "node:assert/strict";
-import { existsSync,mkdirSync,writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import ts from "typescript";
 import { executeBrowserLifecycle, stopOwnedProcessTree, waitForDevToolsActivePort, waitForHttpReady } from "./browser-harness.mjs";
+import { assertSyntheticAuthEnvironment, createSyntheticAuthEnvironment, syntheticAuthMetadata } from "./auth-test-environment.mjs";
 
 const authSource=await readFile("lib/auth/core.ts","utf8"),authOutput=ts.transpileModule(authSource,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText,authCore=await import(`data:text/javascript;base64,${Buffer.from(authOutput).toString("base64")}`);
-const AUTH_TEST_USERNAME="mawar-browser-admin",AUTH_TEST_PASSWORD="browser-auth-001-password",AUTH_TEST_SECRET="browser-auth-001-session-secret-at-least-32-bytes",AUTH_TEST_HASH=await authCore.createPasswordHash(AUTH_TEST_PASSWORD,Uint8Array.from({length:16},(_,index)=>index+17));
+const authTest=await createSyntheticAuthEnvironment(authCore);assertSyntheticAuthEnvironment(authTest.environment);
+const {environment:AUTH_TEST_ENV,username:AUTH_TEST_USERNAME,password:AUTH_TEST_PASSWORD,sessionSecret:AUTH_TEST_SECRET}=authTest;
+const AUTH_TEST_METADATA=syntheticAuthMetadata(authTest);
+const buildResult=spawnSync(process.execPath,["node_modules/next/dist/bin/next","build"],{cwd:process.cwd(),env:AUTH_TEST_ENV,encoding:"utf8",windowsHide:true,stdio:["ignore","pipe","pipe"]});
+if(buildResult.status!==0)throw new Error(`Build browser QA gagal (status ${buildResult.status??"unknown"}).`);
+const browserServerRoot=join(tmpdir(),`mawar-auth-005-server-${process.pid}`);rmSync(browserServerRoot,{recursive:true,force:true});mkdirSync(browserServerRoot,{recursive:true});cpSync(".next",join(browserServerRoot,".next"),{recursive:true});cpSync("public",join(browserServerRoot,"public"),{recursive:true});symlinkSync(join(process.cwd(),"node_modules"),join(browserServerRoot,"node_modules"),"junction");process.once("exit",()=>rmSync(browserServerRoot,{recursive:true,force:true}));
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const stopBrowserTestProcess = async child => {
@@ -30,7 +36,7 @@ let serverStdout="",serverStderr="",chromeStderr="";
 await executeBrowserLifecycle({
  stopProcess:stopBrowserTestProcess,
  resolveChromeExecutable:()=>chromeCandidates.find(existsSync),
- spawnServer:({port})=>{const child=spawn(process.execPath,["node_modules/next/dist/bin/next","start","-H","127.0.0.1","-p",String(port)],{cwd:process.cwd(),env:{...process.env,NODE_ENV:"production",MAWAR_AUTH_USERNAME:AUTH_TEST_USERNAME,MAWAR_AUTH_PASSWORD_HASH:AUTH_TEST_HASH,MAWAR_AUTH_SESSION_SECRET:AUTH_TEST_SECRET},stdio:["ignore","pipe","pipe"],windowsHide:true});child.stdout.on("data",chunk=>{serverStdout+=chunk.toString()});child.stderr.on("data",chunk=>{serverStderr+=chunk.toString()});return child},
+ spawnServer:({port})=>{const child=spawn(process.execPath,[join(process.cwd(),"node_modules/next/dist/bin/next"),"start","-H","127.0.0.1","-p",String(port)],{cwd:browserServerRoot,env:AUTH_TEST_ENV,stdio:["ignore","pipe","pipe"],windowsHide:true});child.stdout.on("data",chunk=>{serverStdout+=chunk.toString()});child.stderr.on("data",chunk=>{serverStderr+=chunk.toString()});return child},
  spawnChrome:({chromeExecutable,profilePath})=>{const child=spawn(chromeExecutable,["--headless=new","--remote-debugging-port=0","--remote-allow-origins=*",`--user-data-dir=${profilePath}`,"--disable-gpu","--disable-software-rasterizer","--disable-gpu-compositing","--disable-breakpad","--disable-crash-reporter","--disable-background-networking","--disable-component-update","--disable-sync","--force-prefers-reduced-motion","--no-sandbox","--no-first-run","--no-default-browser-check","about:blank"],{stdio:["ignore","ignore","pipe"],windowsHide:true});child.stderr.on("data",chunk=>{chromeStderr+=chunk.toString()});return child},
  runBrowser:async({port,profileHandle,serverProcess:server,chromeProcess:chrome,getProcessError,registerBrowserClose})=>{
   const origin=`http://127.0.0.1:${port}`,profile=profileHandle.profilePath;
@@ -55,12 +61,14 @@ await executeBrowserLifecycle({
   let serial = 0;
   const pending = new Map();
   const runtimeErrors = [];
-  let logoutRequestCount = 0;
+  let logoutRequestCount = 0,loginResponseStatus=null,loginRequestShape=null;
   socket.onmessage = event => {
     const message = JSON.parse(event.data);
     if (message.method === "Runtime.exceptionThrown") runtimeErrors.push(message.params.exceptionDetails.text);
     if (message.method === "Runtime.consoleAPICalled" && message.params.type === "error") runtimeErrors.push(message.params.args.map(arg => arg.value ?? arg.description).join(" "));
     if (message.method === "Network.requestWillBeSent" && message.params.request.method === "POST" && message.params.request.url.includes("/api/auth/logout")) logoutRequestCount += 1;
+    if (message.method === "Network.requestWillBeSent" && message.params.request.method === "POST" && message.params.request.url.includes("/api/auth/login")) { try { const body=JSON.parse(message.params.request.postData??"{}");loginRequestShape={usernameLength:String(body.username??"").length,passwordLength:String(body.password??"").length,hasNext:typeof body.next==="string"}; } catch { loginRequestShape={parseable:false}; } }
+    if (message.method === "Network.responseReceived" && message.params.response.url.includes("/api/auth/login")) loginResponseStatus=message.params.response.status;
     if (message.id && pending.has(message.id)) { pending.get(message.id)(message); pending.delete(message.id); }
   };
   const send = (method, params = {}) => new Promise(resolve => { const id = ++serial; pending.set(id, resolve); socket.send(JSON.stringify({ id, method, params })); });
@@ -136,13 +144,12 @@ await executeBrowserLifecycle({
     loginResponsiveMetrics.push({baseWidth,baseHeight,factor,width,height,columns:metric.columns,overflow:metric.overflow});
   }
   await send("Emulation.setDeviceMetricsOverride",{width:1440,height:900,deviceScaleFactor:1,mobile:false});
-  const protectedQuery="?season=MT2-2026&district=93.01.05";await send("Page.navigate",{url:`${origin}/${protectedQuery}`});await waitFor(".auth-page");
+  assert.deepEqual(AUTH_TEST_METADATA,{passwordHashCanonical:true,sessionSecretByteLength:46,passwordHashContainsBackslash:false},"metadata environment sintetis");const protectedQuery="?season=MT2-2026&district=93.01.05";await send("Page.navigate",{url:`${origin}/${protectedQuery}`});await waitFor(".auth-page");
   const redirectedLogin=await evaluate("({pathname:location.pathname,next:new URLSearchParams(location.search).get('next'),cookie:document.cookie})");assert.equal(redirectedLogin.pathname,"/login");assert.equal(redirectedLogin.next,`/${protectedQuery}`);assert.ok(!redirectedLogin.cookie.includes("mawar_session"),"session HttpOnly tidak terlihat sebelum login");
   const setAuthField=async(selector,value)=>evaluate(`(()=>{const input=document.querySelector(${JSON.stringify(selector)}),set=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));input.focus()})()`);
   await setAuthField("#auth-username",AUTH_TEST_USERNAME);await setAuthField("#auth-password","wrong-password");await pressKey("Enter");await waitFor(".auth-error");assert.deepEqual(await evaluate("({text:document.querySelector('.auth-error').textContent.trim(),role:document.querySelector('.auth-error').getAttribute('role'),focused:document.activeElement===document.querySelector('.auth-error')})"),{text:"Username atau kata sandi tidak sesuai.",role:"alert",focused:true},"credential salah generik dan fokus ke alert");
   assert.equal(await evaluate("document.querySelector('.auth-password-toggle').getAttribute('aria-label')"),"Tampilkan kata sandi");await evaluate("document.querySelector('.auth-password-toggle').click()");assert.equal(await evaluate("document.querySelector('.auth-password-toggle').getAttribute('aria-label')"),"Sembunyikan kata sandi");
-  await setAuthField("#auth-username",AUTH_TEST_USERNAME);await setAuthField("#auth-password",AUTH_TEST_PASSWORD);await pressKey("Enter");await waitFor(".sidebar");await waitUntil("new URLSearchParams(location.search).get('season')==='MT2-2026'&&new URLSearchParams(location.search).get('district')==='93.01.05'","login memulihkan direct URL/query");
-  const loginCookies=(await send("Network.getCookies",{urls:[origin]})).result.cookies,sessionCookie=loginCookies.find(cookie=>cookie.name==="mawar_session");assert.ok(sessionCookie?.httpOnly&&!sessionCookie.secure&&sessionCookie.sameSite==="Strict"&&sessionCookie.path==="/"&&sessionCookie.value,"cookie development aman");assert.ok(!(await evaluate("document.cookie")).includes("mawar_session"),"session HttpOnly tidak terlihat sesudah login");
+  loginResponseStatus=null;loginRequestShape=null;await setAuthField("#auth-username",AUTH_TEST_USERNAME);await setAuthField("#auth-password",AUTH_TEST_PASSWORD);assert.deepEqual(await evaluate("(()=>({usernameLength:document.querySelector('#auth-username').value.length,passwordLength:document.querySelector('#auth-password').value.length}))()"),{usernameLength:AUTH_TEST_USERNAME.length,passwordLength:AUTH_TEST_PASSWORD.length},"credential form sintetis");await pressKey("Enter");for(let attempt=0;attempt<80&&(loginResponseStatus===null||loginRequestShape===null);attempt++)await sleep(75);assert.ok([200,303].includes(loginResponseStatus),`Login sintetis gagal (status ${loginResponseStatus??"tidak tersedia"}, bentuk request ${JSON.stringify(loginRequestShape)}).`);await waitUntil("location.pathname!=='/login'","login berpindah dari halaman login");const loginCookies=(await send("Network.getCookies",{urls:[origin]})).result.cookies,sessionCookie=loginCookies.find(cookie=>cookie.name==="mawar_session");assert.ok(sessionCookie?.httpOnly&&!sessionCookie.secure&&sessionCookie.sameSite==="Strict"&&sessionCookie.path==="/"&&sessionCookie.value,"cookie session sintetis tidak tersedia");assert.ok(!(await evaluate("document.cookie")).includes("mawar_session"),"session HttpOnly tidak terlihat pada document.cookie");await waitFor(".sidebar");await waitUntil("new URLSearchParams(location.search).get('season')==='MT2-2026'&&new URLSearchParams(location.search).get('district')==='93.01.05'","login memulihkan direct URL/query");
   await send("Page.reload",{ignoreCache:true});await waitFor(".sidebar");assert.equal(await evaluate("location.pathname"),"/","refresh mempertahankan session");
   console.log(`AUTH login responsive PASS: ${JSON.stringify(loginResponsiveMetrics)}; screenshots=${authEvidenceDir}`);
   const bigInterceptionSource=`(()=>{
