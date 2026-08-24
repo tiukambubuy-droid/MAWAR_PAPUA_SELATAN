@@ -126,3 +126,9 @@ test("collaboration domain taxonomy and institution sources come from production
   const page=await readFile("components/collaboration/CollaborationPage.tsx","utf8");
   assert.match(page,/collaborationDomainOptions\.map/);assert.doesNotMatch(page,/new Set\(selected\.items\.map\(item=>item\.domain\)/);
 });
+
+test("institution collaboration profiles are factual, deduplicated and immutable", () => {
+  const activities=collaboration.selectCollaborations("MT2-2026").items, before=structuredClone(activities), profile=collaboration.buildInstitutionCollaborationProfile("SETDA",activities);
+  assert.ok(profile); assert.equal(profile.connections.length,4); assert.equal(profile.activities.length,3); assert.equal(profile.summary.activityCount,3); assert.equal(profile.summary.activeActivityCount,2); assert.equal(profile.summary.completedActivityCount,1); assert.equal(profile.summary.openFollowUpCount,2); assert.deepEqual(profile.connections.find(x=>x.institutionId==="DISTAN")?.activityIds,["COL-001","COL-002"]); assert.deepEqual(activities,before);
+  const semangga=collaboration.buildInstitutionCollaborationProfile("SETDA",collaboration.selectCollaborations("MT2-2026","93.01.05").items); assert.equal(semangga?.activities.length,1); assert.equal(semangga?.connections.length,2); assert.equal(collaboration.buildInstitutionCollaborationProfile("UNKNOWN",activities),null); assert.equal(collaboration.buildInstitutionCollaborationProfile("SETDA",[]).summary.activityCount,0);
+});

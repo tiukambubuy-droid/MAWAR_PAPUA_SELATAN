@@ -51,6 +51,37 @@ export function buildCollaborationNetwork(activities: readonly CollaborationActi
   const accessibleSummary = edges.length ? edges.map(e => `${institution(e.sourceInstitutionId)?.name} berkoordinasi dengan ${institution(e.targetInstitutionId)?.name} dalam ${e.activityCount} kegiatan: ${e.domains.join(", ")}.`).join(" ") : "Belum ada hubungan kegiatan pada konteks terpilih.";
   return { nodes, edges, accessibleSummary };
 }
+export type CollaborationConnection = { institutionId: string; name: string; institutionType: string; domains: string[]; activityIds: string[]; activityCount: number };
+export type CollaborationProfileActivity = { activity: CollaborationActivity; role: "Koordinator" | "Peserta" };
+export function buildInstitutionCollaborationProfile(institutionId: string, activities: readonly CollaborationActivity[]) {
+  const selected = institution(institutionId);
+  if (!selected) return null;
+  const monitored = activities.filter(activity => activity.monitoring_status !== "not_monitored" && (activity.coordinator_institution_id === institutionId || activity.participant_institution_ids.includes(institutionId)));
+  const connections = new Map<string, CollaborationConnection>();
+  for (const activity of monitored) {
+    const peers = [activity.coordinator_institution_id, ...activity.participant_institution_ids].filter(id => id !== institutionId);
+    for (const peerId of new Set(peers)) {
+      const peer = institution(peerId);
+      if (!peer) continue;
+      const connection = connections.get(peerId) ?? { institutionId: peerId, name: peer.name, institutionType: peer.institution_type, domains: [], activityIds: [], activityCount: 0 };
+      if (!connection.activityIds.includes(activity.id)) connection.activityIds.push(activity.id);
+      if (!connection.domains.includes(activity.domain)) connection.domains.push(activity.domain);
+      connection.activityCount = connection.activityIds.length;
+      connections.set(peerId, connection);
+    }
+  }
+  const activityItems: CollaborationProfileActivity[] = monitored.map(activity => ({ activity, role: activity.coordinator_institution_id === institutionId ? "Koordinator" : "Peserta" }));
+  const active = monitored.filter(activity => ["Berjalan", "Tertunda"].includes(activity.status)).length;
+  const completed = monitored.filter(activity => activity.status === "Selesai").length;
+  const followUps = monitored.filter(activity => Boolean(activity.next_action)).length;
+  const highCritical = monitored.filter(activity => ["Tinggi", "Kritis"].includes(activity.priority)).length;
+  return {
+    institution: selected,
+    activities: activityItems.sort((a, b) => a.activity.id.localeCompare(b.activity.id)),
+    connections: [...connections.values()].sort((a, b) => a.name.localeCompare(b.name)),
+    summary: { connectedInstitutionCount: connections.size, activityCount: monitored.length, activeActivityCount: active, completedActivityCount: completed, openFollowUpCount: followUps, highCriticalPriorityCount: highCritical, averageProgress: monitored.length ? monitored.reduce((sum, activity) => sum + activity.progress_percent, 0) / monitored.length : null, latestUpdate: latestMonitoringTimestamp(monitored.map(activity => activity.updated_at)) }
+  };
+}
 export function layoutCollaborationNetwork(nodes: readonly CollaborationNode[], width: number, height: number) {
   const safeWidth = Number.isFinite(width) && width > 0 ? width : 640, safeHeight = Number.isFinite(height) && height > 0 ? height : 360;
   const padding = 62, centerX = safeWidth / 2, centerY = safeHeight / 2;
